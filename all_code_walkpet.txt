@@ -270,6 +270,251 @@ void main() {
 }
 
 
+# ===== FILE: test/pet_dialogue_resolver_test.dart =====
+import 'package:flutter_test/flutter_test.dart';
+import 'package:walk_pet/data/models/pet.dart';
+import 'package:walk_pet/data/models/pet_emotion.dart';
+import 'package:walk_pet/core/pet_dialogue_resolver.dart';
+
+void main() {
+  group('PetDialogueResolver', () {
+    test('context=normal で既存セリフが返る', () {
+      final result = PetDialogueResolver.resolve(
+        PetStage.stage1,
+        PetEmotion.normal,
+      );
+      expect(result, isNotEmpty);
+      expect(result, isNot('…'));
+    });
+
+    test('context=normal (明示) でも既存セリフ', () {
+      final result = PetDialogueResolver.resolve(
+        PetStage.stage2,
+        PetEmotion.happy,
+        context: DialogueContext.normal,
+      );
+      expect(result, isNotEmpty);
+      expect(result, isNot('…'));
+    });
+
+    test('context=rewardAvailable で報酬系セリフが返る', () {
+      final result = PetDialogueResolver.resolve(
+        PetStage.stage1,
+        PetEmotion.normal,
+        context: DialogueContext.rewardAvailable,
+      );
+      // rewardAvailable 専用セリフのどれかが返る
+      expect(
+        ['おみやげがあるみたい！', '何かみつけたよ！受け取って！', 'プレゼントがとどいてるよ♪'],
+        contains(result),
+      );
+    });
+
+    test('context=onStreak で連続達成セリフが返る', () {
+      final result = PetDialogueResolver.resolve(
+        PetStage.stage2,
+        PetEmotion.hungry,
+        context: DialogueContext.onStreak,
+      );
+      expect(
+        ['れんぞくおさんぽ、すごい！', 'まいにちたのしいね！', 'きょうもいっしょにあるけた♪'],
+        contains(result),
+      );
+    });
+
+    test('全ステージ × 全感情で結果が返る', () {
+      for (final stage in PetStage.values) {
+        for (final emotion in PetEmotion.values) {
+          final result = PetDialogueResolver.resolve(stage, emotion);
+          expect(result, isNotEmpty, reason: '$stage × $emotion');
+        }
+      }
+    });
+  });
+}
+
+
+# ===== FILE: test/streak_service_test.dart =====
+import 'package:flutter_test/flutter_test.dart';
+import 'package:walk_pet/data/models/streak_state.dart';
+import 'package:walk_pet/domain/services/streak_service.dart';
+
+void main() {
+  group('StreakService.updateStreak', () {
+    late String today;
+    late String yesterday;
+
+    setUp(() {
+      today = StreakState.dateStringFrom(DateTime.now());
+      yesterday = StreakState.dateStringFrom(
+          DateTime.now().subtract(const Duration(days: 1)));
+    });
+
+    test('1000歩以上で streak が 1 になる（初回）', () {
+      const state = StreakState();
+      final updated = StreakService.updateStreak(state, 1500, today);
+      expect(updated.currentStreak, 1);
+      expect(updated.lastSuccessDate, today);
+    });
+
+    test('1000歩未満は streak 変わらず', () {
+      const state = StreakState();
+      final updated = StreakService.updateStreak(state, 500, today);
+      expect(updated.currentStreak, 0);
+      expect(updated.lastSuccessDate, '');
+    });
+
+    test('昨日成功 → 今日1000歩以上で連続 +1', () {
+      final state = StreakState(
+        currentStreak: 3,
+        lastSuccessDate: yesterday,
+      );
+      final updated = StreakService.updateStreak(state, 2000, today);
+      expect(updated.currentStreak, 4);
+      expect(updated.lastSuccessDate, today);
+    });
+
+    test('2日以上空いたらリセット（streak=1）', () {
+      final twoDaysAgo = StreakState.dateStringFrom(
+          DateTime.now().subtract(const Duration(days: 2)));
+      final state = StreakState(currentStreak: 5, lastSuccessDate: twoDaysAgo);
+      final updated = StreakService.updateStreak(state, 1000, today);
+      expect(updated.currentStreak, 1);
+      expect(updated.bonusClaimed3, isFalse);
+      expect(updated.bonusClaimed7, isFalse);
+    });
+
+    test('今日すでに記録済みなら変更なし', () {
+      final state = StreakState(currentStreak: 3, lastSuccessDate: today);
+      final updated = StreakService.updateStreak(state, 5000, today);
+      expect(updated.currentStreak, 3);
+      expect(identical(updated, state), isTrue);
+    });
+
+    test('ちょうど1000歩で成功判定される', () {
+      const state = StreakState();
+      final updated = StreakService.updateStreak(state, 1000, today);
+      expect(updated.currentStreak, 1);
+    });
+  });
+
+  group('StreakService.checkBonus', () {
+    test('3日連続でボーナスあり', () {
+      const state = StreakState(currentStreak: 3);
+      final result = StreakService.checkBonus(state);
+      expect(result.hasBonuses, isTrue);
+      expect(result.bonuses, contains(StreakBonus.day3));
+    });
+
+    test('7日連続で両方のボーナスあり', () {
+      const state = StreakState(currentStreak: 7);
+      final result = StreakService.checkBonus(state);
+      expect(result.bonuses, contains(StreakBonus.day3));
+      expect(result.bonuses, contains(StreakBonus.day7));
+    });
+
+    test('受取済みならボーナスなし', () {
+      const state = StreakState(
+        currentStreak: 7,
+        bonusClaimed3: true,
+        bonusClaimed7: true,
+      );
+      final result = StreakService.checkBonus(state);
+      expect(result.hasBonuses, isFalse);
+    });
+
+    test('2日連続ではボーナスなし', () {
+      const state = StreakState(currentStreak: 2);
+      final result = StreakService.checkBonus(state);
+      expect(result.hasBonuses, isFalse);
+    });
+  });
+
+  group('StreakService.claimBonus', () {
+    test('day3 ボーナスを受取済みにできる', () {
+      const state = StreakState(currentStreak: 3);
+      final updated = StreakService.claimBonus(state, StreakBonus.day3);
+      expect(updated.bonusClaimed3, isTrue);
+      expect(updated.bonusClaimed7, isFalse);
+    });
+
+    test('day7 ボーナスを受取済みにできる', () {
+      const state = StreakState(currentStreak: 7);
+      final updated = StreakService.claimBonus(state, StreakBonus.day7);
+      expect(updated.bonusClaimed7, isTrue);
+    });
+  });
+}
+
+
+# ===== FILE: test/streak_state_test.dart =====
+import 'package:flutter_test/flutter_test.dart';
+import 'package:walk_pet/data/models/streak_state.dart';
+
+void main() {
+  group('StreakState', () {
+    test('デフォルトは streak=0, lastSuccessDate 空', () {
+      const state = StreakState();
+      expect(state.currentStreak, 0);
+      expect(state.lastSuccessDate, '');
+      expect(state.bonusClaimed3, isFalse);
+      expect(state.bonusClaimed7, isFalse);
+    });
+
+    test('toJson / fromJson で往復できる', () {
+      final state = StreakState(
+        currentStreak: 5,
+        lastSuccessDate: '2026-03-22',
+        bonusClaimed3: true,
+        bonusClaimed7: false,
+      );
+      final json = state.toJson();
+      final restored = StreakState.fromJson(json);
+      expect(restored.currentStreak, 5);
+      expect(restored.lastSuccessDate, '2026-03-22');
+      expect(restored.bonusClaimed3, isTrue);
+      expect(restored.bonusClaimed7, isFalse);
+    });
+
+    test('isToday は今日の日付で true を返す', () {
+      final todayStr = StreakState.dateStringFrom(DateTime.now());
+      expect(StreakState.isToday(todayStr), isTrue);
+    });
+
+    test('isToday は昨日の日付で false を返す', () {
+      final yesterday = DateTime.now().subtract(const Duration(days: 1));
+      final yesterdayStr = StreakState.dateStringFrom(yesterday);
+      expect(StreakState.isToday(yesterdayStr), isFalse);
+    });
+
+    test('isYesterday は昨日の日付で true を返す', () {
+      final yesterday = DateTime.now().subtract(const Duration(days: 1));
+      final yesterdayStr = StreakState.dateStringFrom(yesterday);
+      expect(StreakState.isYesterday(yesterdayStr), isTrue);
+    });
+
+    test('isYesterday は今日の日付で false を返す', () {
+      final todayStr = StreakState.dateStringFrom(DateTime.now());
+      expect(StreakState.isYesterday(todayStr), isFalse);
+    });
+
+    test('copyWith で一部フィールドだけ変更できる', () {
+      const state = StreakState(currentStreak: 3, lastSuccessDate: '2026-03-20');
+      final updated = state.copyWith(currentStreak: 4);
+      expect(updated.currentStreak, 4);
+      expect(updated.lastSuccessDate, '2026-03-20');
+    });
+
+    test('fromJson で欠損フィールドのデフォルト値', () {
+      final state = StreakState.fromJson({});
+      expect(state.currentStreak, 0);
+      expect(state.lastSuccessDate, '');
+      expect(state.bonusClaimed3, isFalse);
+    });
+  });
+}
+
+
 # ===== FILE: test/widget_test.dart =====
 import 'package:flutter_test/flutter_test.dart';
 
@@ -498,14 +743,21 @@ class PetAssetResolver {
 
 
 # ===== FILE: lib/core/pet_dialogue_resolver.dart =====
-import '../../data/models/pet.dart';
-import '../../data/models/pet_emotion.dart';
+import '../data/models/pet.dart';
+import '../data/models/pet_emotion.dart';
 
-/// stage × emotion からひとこと文言を解決する
+/// セリフの文脈
+enum DialogueContext {
+  normal, // 通常時
+  rewardAvailable, // 報酬受取可能
+  onStreak, // 連続達成中
+}
+
+/// stage × emotion × context からひとこと文言を解決する
 ///
 /// 将来: JSON化やランダム化が容易な構造
 class PetDialogueResolver {
-  /// stage × emotion → ひとこと文言リスト
+  /// stage × emotion → ひとこと文言リスト (既存)
   static const Map<PetStage, Map<PetEmotion, List<String>>> _dialogues = {
     PetStage.stage1: {
       PetEmotion.normal: [
@@ -560,9 +812,37 @@ class PetDialogueResolver {
     },
   };
 
-  /// stage × emotion からひとこと文言を取得
-  /// 時刻ベースでセミランダム選択 (将来 Random に変更可能)
-  static String resolve(PetStage stage, PetEmotion emotion) {
+  /// context別の追加セリフ（stage共通）
+  static const Map<DialogueContext, List<String>> _contextDialogues = {
+    DialogueContext.rewardAvailable: [
+      'おみやげがあるみたい！',
+      '何かみつけたよ！受け取って！',
+      'プレゼントがとどいてるよ♪',
+    ],
+    DialogueContext.onStreak: [
+      'れんぞくおさんぽ、すごい！',
+      'まいにちたのしいね！',
+      'きょうもいっしょにあるけた♪',
+    ],
+  };
+
+  /// stage × emotion × context からひとこと文言を取得
+  /// context がマッチした場合はそちらを優先表示
+  static String resolve(
+    PetStage stage,
+    PetEmotion emotion, {
+    DialogueContext context = DialogueContext.normal,
+  }) {
+    // context 専用セリフがあればそちらを優先
+    if (context != DialogueContext.normal) {
+      final contextList = _contextDialogues[context];
+      if (contextList != null && contextList.isNotEmpty) {
+        return contextList[
+            DateTime.now().millisecondsSinceEpoch % contextList.length];
+      }
+    }
+
+    // 通常セリフ
     final emotionMap = _dialogues[stage];
     if (emotionMap == null) return '…';
 
@@ -683,6 +963,7 @@ class DebugConfig {
 
 # ===== FILE: lib/data/datasources/health_datasource.dart =====
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:health/health.dart';
 import '../models/health_permission_status.dart';
 
@@ -697,27 +978,34 @@ class HealthDatasource {
   /// health プラグインの初期化
   Future<void> configure() async {
     if (_configured) return;
+    debugPrint('[HealthDatasource] configure() 開始');
     await _health.configure();
     _configured = true;
+    debugPrint('[HealthDatasource] configure() 完了');
   }
 
   /// Android: Health Connect の利用可否を判定
-  /// iOS: 常に null (HealthKit は OS 標準のため利用可能)
+  /// iOS: 常に true (HealthKit は OS 標準のため利用可能)
   Future<bool> isHealthConnectAvailable() async {
     if (!Platform.isAndroid) return true; // iOS は常に利用可能
     try {
       final status = await _health.getHealthConnectSdkStatus();
-      return status == HealthConnectSdkStatus.sdkAvailable;
-    } catch (_) {
+      final available = status == HealthConnectSdkStatus.sdkAvailable;
+      debugPrint('[HealthDatasource] Health Connect available=$available (status=$status)');
+      return available;
+    } catch (e) {
+      debugPrint('[HealthDatasource] Health Connect check error: $e');
       return false;
     }
   }
 
   /// 歩数読み取り権限をリクエスト
   Future<HealthPermissionStatus> requestStepPermission() async {
+    debugPrint('[HealthDatasource] requestStepPermission() 開始');
     try {
       // Android: Health Connect が利用できるか先にチェック
       if (!await isHealthConnectAvailable()) {
+        debugPrint('[HealthDatasource] → unavailable');
         return HealthPermissionStatus.unavailable;
       }
 
@@ -726,26 +1014,30 @@ class HealthDatasource {
       final types = [HealthDataType.STEPS];
       final permissions = [HealthDataAccess.READ];
 
+      debugPrint('[HealthDatasource] requestAuthorization() 実行中...');
       final granted = await _health.requestAuthorization(
         types,
         permissions: permissions,
       );
 
-      if (granted) {
-        return HealthPermissionStatus.granted;
-      } else {
-        return HealthPermissionStatus.denied;
-      }
-    } catch (_) {
+      final result = granted
+          ? HealthPermissionStatus.granted
+          : HealthPermissionStatus.denied;
+      debugPrint('[HealthDatasource] requestAuthorization() → $result (granted=$granted)');
+      return result;
+    } catch (e) {
+      debugPrint('[HealthDatasource] requestStepPermission() error: $e');
       return HealthPermissionStatus.error;
     }
   }
 
   /// 権限状態を確認 (権限要求なし)
   Future<HealthPermissionStatus> checkStepPermission() async {
+    debugPrint('[HealthDatasource] checkStepPermission() 開始');
     try {
       // Android: Health Connect が利用できるか先にチェック
       if (!await isHealthConnectAvailable()) {
+        debugPrint('[HealthDatasource] → unavailable');
         return HealthPermissionStatus.unavailable;
       }
 
@@ -760,12 +1052,15 @@ class HealthDatasource {
       );
 
       if (hasPermissions == true) {
+        debugPrint('[HealthDatasource] checkStepPermission() → granted');
         return HealthPermissionStatus.granted;
       } else {
         // false or null → 未許可 (denied として扱う)
+        debugPrint('[HealthDatasource] checkStepPermission() → denied (hasPermissions=$hasPermissions)');
         return HealthPermissionStatus.denied;
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[HealthDatasource] checkStepPermission() error: $e');
       return HealthPermissionStatus.error;
     }
   }
@@ -773,6 +1068,7 @@ class HealthDatasource {
   /// 今日 0:00 〜 現在の歩数合計を取得
   /// 権限がない場合や取得失敗時は null を返す
   Future<int?> getTodayTotalSteps() async {
+    debugPrint('[HealthDatasource] getTodayTotalSteps() 開始');
     try {
       await configure();
 
@@ -780,26 +1076,11 @@ class HealthDatasource {
       final midnight = DateTime(now.year, now.month, now.day);
 
       final steps = await _health.getTotalStepsInInterval(midnight, now);
+      debugPrint('[HealthDatasource] getTodayTotalSteps() → $steps 歩');
       return steps;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[HealthDatasource] getTodayTotalSteps() error: $e');
       return null;
-    }
-  }
-
-  /// 設定画面を開く
-  /// Android: Health Connect アプリをインストール / 起動
-  /// iOS: 設定画面のヘルスケア権限は OS 側で管理されるため
-  ///       再度 requestAuthorization を試行する
-  Future<void> openSettings() async {
-    try {
-      if (Platform.isAndroid) {
-        await _health.installHealthConnect();
-      }
-      // iOS: requestAuthorization を再実行することで
-      //       未表示のダイアログを出す。既に拒否済みなら何も起きないが
-      //       テキストで設定アプリへの誘導を表示している。
-    } catch (_) {
-      // 設定画面を開けない場合は無視
     }
   }
 }
@@ -811,6 +1092,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/pet.dart';
 import '../models/inventory_item.dart';
 import '../models/daily_reward_state.dart';
+import '../models/streak_state.dart';
 
 /// SharedPreferencesを使ったローカルデータソース
 class LocalDatasource {
@@ -820,6 +1102,7 @@ class LocalDatasource {
   static const _onboardingKey = 'onboarding_completed';
   static const _introShownKey = 'intro_shown';
   static const _lastFedAtKey = 'last_fed_at';
+  static const _streakKey = 'streak_data';
 
   final SharedPreferences _prefs;
 
@@ -899,6 +1182,18 @@ class LocalDatasource {
     final str = _prefs.getString(_lastFedAtKey);
     if (str == null) return null;
     return DateTime.tryParse(str);
+  }
+
+  // --- Streak ---
+
+  Future<void> saveStreak(StreakState state) async {
+    await _prefs.setString(_streakKey, jsonEncode(state.toJson()));
+  }
+
+  StreakState loadStreak() {
+    final json = _prefs.getString(_streakKey);
+    if (json == null) return const StreakState();
+    return StreakState.fromJson(jsonDecode(json) as Map<String, dynamic>);
   }
 }
 
@@ -1192,6 +1487,72 @@ class StepState {
 }
 
 
+# ===== FILE: lib/data/models/streak_state.dart =====
+/// 連続達成日数（streak）の状態モデル
+class StreakState {
+  final int currentStreak;
+  final String lastSuccessDate; // yyyy-MM-dd or ''
+  final bool bonusClaimed3;
+  final bool bonusClaimed7;
+
+  const StreakState({
+    this.currentStreak = 0,
+    this.lastSuccessDate = '',
+    this.bonusClaimed3 = false,
+    this.bonusClaimed7 = false,
+  });
+
+  StreakState copyWith({
+    int? currentStreak,
+    String? lastSuccessDate,
+    bool? bonusClaimed3,
+    bool? bonusClaimed7,
+  }) =>
+      StreakState(
+        currentStreak: currentStreak ?? this.currentStreak,
+        lastSuccessDate: lastSuccessDate ?? this.lastSuccessDate,
+        bonusClaimed3: bonusClaimed3 ?? this.bonusClaimed3,
+        bonusClaimed7: bonusClaimed7 ?? this.bonusClaimed7,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'currentStreak': currentStreak,
+        'lastSuccessDate': lastSuccessDate,
+        'bonusClaimed3': bonusClaimed3,
+        'bonusClaimed7': bonusClaimed7,
+      };
+
+  factory StreakState.fromJson(Map<String, dynamic> json) => StreakState(
+        currentStreak: json['currentStreak'] as int? ?? 0,
+        lastSuccessDate: json['lastSuccessDate'] as String? ?? '',
+        bonusClaimed3: json['bonusClaimed3'] as bool? ?? false,
+        bonusClaimed7: json['bonusClaimed7'] as bool? ?? false,
+      );
+
+  // --- 日付ヘルパー ---
+
+  /// 指定日付が「今日」かどうか
+  static bool isToday(String dateStr) => dateStr == _todayString();
+
+  /// 指定日付が「昨日」かどうか
+  static bool isYesterday(String dateStr) {
+    final yesterday = DateTime.now().subtract(const Duration(days: 1));
+    return dateStr == _dateString(yesterday);
+  }
+
+  /// 今日のデータで成功済みかどうか
+  bool get isSuccessToday => isToday(lastSuccessDate);
+
+  static String _todayString() => _dateString(DateTime.now());
+
+  static String _dateString(DateTime dt) =>
+      '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+
+  /// テスト用: 任意の DateTime から日付文字列を生成
+  static String dateStringFrom(DateTime dt) => _dateString(dt);
+}
+
+
 # ===== FILE: lib/data/repositories/game_repository.dart =====
 import '../datasources/local_datasource.dart';
 import '../models/pet.dart';
@@ -1360,9 +1721,6 @@ abstract class HealthRepository {
 
   /// 現在の権限状態を確認 (権限要求なし)
   Future<HealthPermissionStatus> checkPermissionStatus();
-
-  /// 設定画面を開く
-  Future<void> openSettings();
 }
 
 // =============================================================
@@ -1393,11 +1751,6 @@ class RealHealthRepository implements HealthRepository {
   Future<HealthPermissionStatus> checkPermissionStatus() async {
     return _datasource.checkStepPermission();
   }
-
-  @override
-  Future<void> openSettings() async {
-    await _datasource.openSettings();
-  }
 }
 
 // =============================================================
@@ -1426,11 +1779,6 @@ class DummyHealthRepository implements HealthRepository {
   @override
   Future<HealthPermissionStatus> checkPermissionStatus() async {
     return HealthPermissionStatus.granted;
-  }
-
-  @override
-  Future<void> openSettings() async {
-    // ダミー: 何もしない
   }
 }
 
@@ -1717,7 +2065,92 @@ class RewardStatus {
 }
 
 
+# ===== FILE: lib/domain/services/streak_service.dart =====
+import '../../data/models/streak_state.dart';
+
+/// 連続達成(streak) のドメインロジック
+///
+/// 1日1000歩以上を「おさんぽ成功日」とする。
+/// 純粋関数ベースでテストしやすい設計。
+class StreakService {
+  /// おさんぽ成功とみなす最低歩数
+  static const int successThreshold = 1000;
+
+  /// streak を更新する
+  ///
+  /// [todaySteps] が閾値以上で、かつ今日まだ記録していなければ:
+  /// - lastSuccessDate が昨日 → streak +1（連続）
+  /// - lastSuccessDate が昨日以外 → streak = 1（リセット）
+  /// 閾値未満 or 今日すでに記録済み → 変更なし
+  static StreakState updateStreak(
+    StreakState current,
+    int todaySteps,
+    String todayDate,
+  ) {
+    // 歩数が閾値未満 → 変更なし
+    if (todaySteps < successThreshold) return current;
+
+    // 今日すでに記録済み → 変更なし
+    if (current.lastSuccessDate == todayDate) return current;
+
+    // 昨日が成功日 → 連続
+    if (StreakState.isYesterday(current.lastSuccessDate)) {
+      return current.copyWith(
+        currentStreak: current.currentStreak + 1,
+        lastSuccessDate: todayDate,
+      );
+    }
+
+    // それ以外 → リセットして1から
+    return current.copyWith(
+      currentStreak: 1,
+      lastSuccessDate: todayDate,
+      bonusClaimed3: false,
+      bonusClaimed7: false,
+    );
+  }
+
+  /// ボーナス判定結果
+  static StreakBonusResult checkBonus(StreakState state) {
+    final List<StreakBonus> bonuses = [];
+
+    if (state.currentStreak >= 3 && !state.bonusClaimed3) {
+      bonuses.add(StreakBonus.day3);
+    }
+    if (state.currentStreak >= 7 && !state.bonusClaimed7) {
+      bonuses.add(StreakBonus.day7);
+    }
+
+    return StreakBonusResult(bonuses: bonuses);
+  }
+
+  /// ボーナスを受取済みにする
+  static StreakState claimBonus(StreakState state, StreakBonus bonus) {
+    switch (bonus) {
+      case StreakBonus.day3:
+        return state.copyWith(bonusClaimed3: true);
+      case StreakBonus.day7:
+        return state.copyWith(bonusClaimed7: true);
+    }
+  }
+}
+
+enum StreakBonus {
+  day3, // 3日連続ボーナス
+  day7, // 7日連続ボーナス
+}
+
+class StreakBonusResult {
+  final List<StreakBonus> bonuses;
+
+  const StreakBonusResult({this.bonuses = const []});
+
+  bool get hasBonuses => bonuses.isNotEmpty;
+}
+
+
 # ===== FILE: lib/presentation/providers/providers.dart =====
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/datasources/local_datasource.dart';
@@ -1726,6 +2159,7 @@ import '../../data/repositories/health_repository.dart';
 import '../../data/repositories/game_repository.dart';
 import '../../data/repositories/save_repository.dart';
 import '../../core/config/debug_config.dart';
+import '../../core/pet_dialogue_resolver.dart';
 import '../../data/models/step_state.dart';
 import '../../data/models/pet.dart';
 import '../../data/models/pet_emotion.dart';
@@ -1733,8 +2167,10 @@ import '../../data/models/inventory_item.dart';
 import '../../data/models/daily_reward_state.dart';
 import '../../data/models/health_permission_status.dart';
 import '../../data/models/food.dart';
+import '../../data/models/streak_state.dart';
 import '../../domain/services/reward_service.dart';
 import '../../domain/services/emotion_service.dart';
+import '../../domain/services/streak_service.dart';
 
 // =============================================================
 // Core Providers (依存注入)
@@ -1819,30 +2255,45 @@ final introShownProvider =
 
 class HealthPermissionNotifier extends StateNotifier<HealthPermissionStatus> {
   final HealthRepository _healthRepo;
+  bool _requesting = false; // 多重実行防止
 
   HealthPermissionNotifier(this._healthRepo)
       : super(HealthPermissionStatus.unknown);
 
+  /// 権限状態を確認するだけ（ダイアログは出さない）
   Future<void> check() async {
-    state = await _healthRepo.checkPermissionStatus();
+    final result = await _healthRepo.checkPermissionStatus();
+    debugPrint('[HealthPermission] check() → $result');
+    state = result;
   }
 
+  /// requestAuthorization を実行（ダイアログが出る可能性あり）
   Future<HealthPermissionStatus> request() async {
-    state = await _healthRepo.requestPermission();
-    return state;
-  }
-
-  /// 初回: check → 未許可なら自動で request まで実行
-  Future<void> ensureAuthorized() async {
-    state = await _healthRepo.checkPermissionStatus();
-    if (state != HealthPermissionStatus.granted) {
-      state = await _healthRepo.requestPermission();
+    if (_requesting) {
+      debugPrint('[HealthPermission] request() スキップ（実行中）');
+      return state;
+    }
+    _requesting = true;
+    try {
+      final result = await _healthRepo.requestPermission();
+      debugPrint('[HealthPermission] request() → $result');
+      state = result;
+      return result;
+    } finally {
+      _requesting = false;
     }
   }
 
-  /// 設定画面を開く
-  Future<void> openSettings() async {
-    await _healthRepo.openSettings();
+  /// 初回起動用: check → 未許可なら自動で request（1回だけ）
+  Future<void> ensureAuthorized() async {
+    final checkResult = await _healthRepo.checkPermissionStatus();
+    debugPrint('[HealthPermission] ensureAuthorized() check → $checkResult');
+    state = checkResult;
+
+    if (checkResult != HealthPermissionStatus.granted) {
+      debugPrint('[HealthPermission] ensureAuthorized() → request 実行');
+      await request();
+    }
   }
 }
 
@@ -1953,6 +2404,53 @@ final rewardStateProvider =
   return RewardNotifier(ref.watch(gameRepositoryProvider));
 });
 
+// =============================================================
+// Streak Provider
+// =============================================================
+
+class StreakNotifier extends StateNotifier<StreakState> {
+  final LocalDatasource _datasource;
+
+  StreakNotifier(this._datasource) : super(_datasource.loadStreak());
+
+  /// streak を更新 (歩数取得時に呼ばれる)
+  Future<List<StreakBonus>> updateToday(int todaySteps) async {
+    final todayDate = StreakState.dateStringFrom(DateTime.now());
+    final updated = StreakService.updateStreak(state, todaySteps, todayDate);
+
+    if (updated.lastSuccessDate != state.lastSuccessDate ||
+        updated.currentStreak != state.currentStreak) {
+      // streak が変化した場合のみ保存
+      await _datasource.saveStreak(updated);
+      state = updated;
+    }
+
+    // ボーナスチェック
+    final bonusResult = StreakService.checkBonus(state);
+    return bonusResult.bonuses;
+  }
+
+  /// ボーナスを受取済みにする
+  Future<void> claimBonus(StreakBonus bonus) async {
+    final updated = StreakService.claimBonus(state, bonus);
+    await _datasource.saveStreak(updated);
+    state = updated;
+  }
+
+  void refresh() {
+    state = _datasource.loadStreak();
+  }
+}
+
+final streakProvider =
+    StateNotifierProvider<StreakNotifier, StreakState>((ref) {
+  return StreakNotifier(ref.watch(localDatasourceProvider));
+});
+
+// =============================================================
+// Reward Status Provider
+// =============================================================
+
 final rewardStatusListProvider = Provider<List<RewardStatus>>((ref) {
   final stepAsync = ref.watch(stepProvider);
   final rewardState = ref.watch(rewardStateProvider);
@@ -1963,6 +2461,25 @@ final rewardStatusListProvider = Provider<List<RewardStatus>>((ref) {
     loading: () => [],
     error: (_, _) => [],
   );
+});
+
+// =============================================================
+// Dialogue Context Provider
+// =============================================================
+
+final dialogueContextProvider = Provider<DialogueContext>((ref) {
+  final rewardStatuses = ref.watch(rewardStatusListProvider);
+  final streak = ref.watch(streakProvider);
+
+  // 受取可能報酬があれば最優先
+  final hasAvailable =
+      rewardStatuses.any((rs) => rs.status == RewardStatusType.available);
+  if (hasAvailable) return DialogueContext.rewardAvailable;
+
+  // 連続達成中 (2日以上)
+  if (streak.currentStreak >= 2) return DialogueContext.onStreak;
+
+  return DialogueContext.normal;
 });
 
 // =============================================================
@@ -2009,6 +2526,24 @@ class GameActions {
     _ref.invalidate(stepProvider);
   }
 
+  /// streak を更新し、ボーナスがあれば付与
+  Future<List<StreakBonus>> checkAndUpdateStreak() async {
+    final stepState = await _ref.read(stepProvider.future);
+    final bonuses =
+        await _ref.read(streakProvider.notifier).updateToday(stepState.steps);
+
+    // ボーナス付与
+    for (final bonus in bonuses) {
+      await _gameRepo.addFood('kinomi'); // きのみ1個
+      await _ref.read(streakProvider.notifier).claimBonus(bonus);
+    }
+    if (bonuses.isNotEmpty) {
+      _ref.read(inventoryProvider.notifier).refresh();
+    }
+
+    return bonuses;
+  }
+
   // =============================================================
   // Debug Actions
   // =============================================================
@@ -2041,9 +2576,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/pet.dart';
 import '../../data/models/food.dart';
+import '../../data/models/inventory_item.dart';
 import '../../data/models/step_state.dart' as models;
+import '../../data/models/streak_state.dart';
 import '../../data/models/health_permission_status.dart';
 import '../../domain/services/reward_service.dart';
+import '../../domain/services/streak_service.dart';
 import '../../domain/entities/pet_entity.dart';
 import '../../core/pet_stage_config.dart';
 import '../../core/pet_dialogue_resolver.dart';
@@ -2085,6 +2623,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         final status = ref.read(healthPermissionProvider);
         if (status == HealthPermissionStatus.granted) {
           ref.read(gameActionsProvider).refreshSteps();
+          // streak 更新
+          ref.read(gameActionsProvider).checkAndUpdateStreak().then((bonuses) {
+            if (bonuses.isNotEmpty && mounted) {
+              _showStreakBonusDialog(context, bonuses);
+            }
+          });
         }
       });
       ref.read(emotionProvider.notifier).refresh();
@@ -2103,6 +2647,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       ref.read(healthPermissionProvider.notifier).check();
       ref.read(gameActionsProvider).refreshSteps();
       ref.read(emotionProvider.notifier).refresh();
+      ref.read(gameActionsProvider).checkAndUpdateStreak();
     }
   }
 
@@ -2172,6 +2717,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final permissionStatus = ref.watch(healthPermissionProvider);
     final gameActions = ref.read(gameActionsProvider);
     final emotion = ref.watch(emotionProvider);
+    final streak = ref.watch(streakProvider);
+    final dialogueContext = ref.watch(dialogueContextProvider);
 
 
 
@@ -2227,10 +2774,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 ),
               ),
 
-            _PetSection(pet: pet, emotion: emotion),
+            _PetSection(
+              pet: pet,
+              emotion: emotion,
+              dialogueContext: dialogueContext,
+            ),
             const SizedBox(height: 20),
-            _buildStepSection(permissionStatus, stepAsync, ref),
+            _buildStepSection(permissionStatus, stepAsync, ref, streak),
             const SizedBox(height: 20),
+            // 次目標 & 受取可能バナー
+            _NextGoalBanner(
+              rewardStatuses: rewardStatuses,
+              currentSteps: stepAsync.valueOrNull?.steps ?? 0,
+            ),
+            const SizedBox(height: 12),
             _RewardSection(
               rewardStatuses: rewardStatuses,
               currentSteps: stepAsync.valueOrNull?.steps ?? 0,
@@ -2244,6 +2801,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     ),
                   );
                 }
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // もちもの導線
+            _InventoryShortcut(
+              inventory: ref.watch(inventoryProvider),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                      builder: (_) => const InventoryScreen()),
+                );
               },
             ),
             const SizedBox(height: 20),
@@ -2272,7 +2841,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     HealthPermissionStatus permissionStatus,
     AsyncValue<models.StepState> stepAsync,
     WidgetRef ref,
+    StreakState streak,
   ) {
+    // 許可済み → 歩数表示
+    if (permissionStatus == HealthPermissionStatus.granted) {
+      return _StepSection(stepAsync: stepAsync, streak: streak);
+    }
+
+    // 確認中
     if (permissionStatus == HealthPermissionStatus.unknown) {
       return const Card(
         elevation: 2,
@@ -2280,31 +2856,120 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           padding: EdgeInsets.all(20),
           child: Row(
             children: [
-              Icon(Icons.directions_walk, size: 36, color: Colors.grey),
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
               SizedBox(width: 16),
-              Text('権限を確認中...'),
+              Text('歩数データを確認しています...'),
             ],
           ),
         ),
       );
     }
 
-    if (permissionStatus == HealthPermissionStatus.granted) {
-      return _StepSection(stepAsync: stepAsync);
-    }
-
-    return _PermissionDeniedSection(
+    // 未許可 / 拒否 / エラー → 許可要求セクション
+    return _PermissionRequestSection(
       status: permissionStatus,
-      onRetry: () async {
+      onRequest: () async {
         final result =
             await ref.read(healthPermissionProvider.notifier).request();
         if (result == HealthPermissionStatus.granted) {
           ref.read(gameActionsProvider).refreshSteps();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('✓ 歩数データを許可しました！'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
         }
       },
-      onOpenSettings: () async {
-        await ref.read(healthPermissionProvider.notifier).openSettings();
+      onSkip: () {
+        // 何もしない（カードはそのまま残るが操作は妨げない）
       },
+    );
+  }
+
+  /// streak ボーナス獲得ダイアログ
+  void _showStreakBonusDialog(
+      BuildContext context, List<StreakBonus> bonuses) {
+    final streak = ref.read(streakProvider);
+    final emoji = bonuses.any((b) => b == StreakBonus.day7) ? '🎊' : '🎉';
+    final title = bonuses.map((b) {
+      switch (b) {
+        case StreakBonus.day3:
+          return '3日連続達成！';
+        case StreakBonus.day7:
+          return '7日連続達成！';
+      }
+    }).join(' & ');
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Row(
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 28)),
+            const SizedBox(width: 8),
+            Expanded(child: Text(title)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '🔥 ${streak.currentStreak}日連続おさんぽ！',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(foodEmoji('kinomi'),
+                      style: const TextStyle(fontSize: 24)),
+                  const SizedBox(width: 8),
+                  Text(
+                    'きのみ ×${bonuses.length} ゲット！',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.brown.shade700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'まいにち歩いてくれてありがとう！',
+              style: TextStyle(
+                  fontSize: 13, color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('やったー！', style: TextStyle(fontSize: 16)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -2353,8 +3018,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 class _PetSection extends StatelessWidget {
   final Pet pet;
   final PetEmotion emotion;
+  final DialogueContext dialogueContext;
 
-  const _PetSection({required this.pet, required this.emotion});
+  const _PetSection({
+    required this.pet,
+    required this.emotion,
+    this.dialogueContext = DialogueContext.normal,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -2363,7 +3033,11 @@ class _PetSection extends StatelessWidget {
     final config = PetStageConfig.forStage(pet.stage);
     final isMaxStage = pet.stage == PetStage.stage3;
 
-    final hitokoto = PetDialogueResolver.resolve(pet.stage, emotion);
+    final hitokoto = PetDialogueResolver.resolve(
+      pet.stage,
+      emotion,
+      context: dialogueContext,
+    );
 
     return Card(
       elevation: 2,
@@ -2488,8 +3162,9 @@ class _PetSection extends StatelessWidget {
 
 class _StepSection extends StatelessWidget {
   final AsyncValue<models.StepState> stepAsync;
+  final StreakState streak;
 
-  const _StepSection({required this.stepAsync});
+  const _StepSection({required this.stepAsync, required this.streak});
 
   @override
   Widget build(BuildContext context) {
@@ -2498,45 +3173,223 @@ class _StepSection extends StatelessWidget {
       color: const Color(0xFFE8F5E9),
       child: Padding(
         padding: const EdgeInsets.all(20),
-        child: Row(
+        child: Column(
           children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: const BoxDecoration(
-                color: Color(0xFFC8E6C9),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.directions_walk,
-                  size: 28, color: Colors.green.shade700),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'きょうのおさんぽ',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.green.shade700,
-                    ),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFC8E6C9),
+                    shape: BoxShape.circle,
                   ),
-                  stepAsync.when(
-                    data: (stepState) => Text(
-                      '${stepState.steps} 歩',
+                  child: Icon(Icons.directions_walk,
+                      size: 28, color: Colors.green.shade700),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'きょうのおさんぽ',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.green.shade700,
+                        ),
+                      ),
+                      stepAsync.when(
+                        data: (stepState) => Text(
+                          '${stepState.steps} 歩',
+                          style: TextStyle(
+                            fontSize: 30,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green.shade900,
+                          ),
+                        ),
+                        loading: () => const Text('読み込み中...'),
+                        error: (e, _) => const Text(
+                          '歩数を取得できませんでした',
+                          style: TextStyle(color: Colors.red),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            // streak バッジ
+            if (streak.currentStreak >= 1) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('🔥', style: TextStyle(fontSize: 16)),
+                    const SizedBox(width: 4),
+                    Text(
+                      '連続 ${streak.currentStreak}日',
                       style: TextStyle(
-                        fontSize: 30,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
-                        color: Colors.green.shade900,
+                        color: Colors.orange.shade800,
                       ),
                     ),
-                    loading: () => const Text('読み込み中...'),
-                    error: (e, _) => const Text(
-                      '歩数を取得できませんでした',
-                      style: TextStyle(color: Colors.red),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================
+// Permission Request Section — 歩数データの許可を促す
+// =============================================================
+
+class _PermissionRequestSection extends StatelessWidget {
+  final HealthPermissionStatus status;
+  final VoidCallback onRequest;
+  final VoidCallback onSkip;
+
+  const _PermissionRequestSection({
+    required this.status,
+    required this.onRequest,
+    required this.onSkip,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // unavailable (Health Connect 未導入等)
+    if (status == HealthPermissionStatus.unavailable) {
+      return Card(
+        elevation: 2,
+        color: Colors.orange.shade50,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              const Icon(Icons.phone_android, size: 36, color: Colors.orange),
+              const SizedBox(height: 10),
+              const Text(
+                '健康データを利用できません',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '歩数機能が使えない端末の可能性があります。\n歩数なしでもアプリは遊べます。',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // error
+    if (status == HealthPermissionStatus.error) {
+      return Card(
+        elevation: 2,
+        color: Colors.grey.shade50,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              Icon(Icons.cloud_off, size: 36, color: Colors.grey.shade400),
+              const SizedBox(height: 10),
+              const Text(
+                '歩数データを取得できませんでした',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'しばらくしてからもう一度お試しください。',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: onRequest,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('再読み込み'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // denied / unknown以外 → 許可を促す
+    return Card(
+      elevation: 2,
+      color: const Color(0xFFFFF8E1), // あたたかいイエロー
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            const Text('🚶', style: TextStyle(fontSize: 36)),
+            const SizedBox(height: 10),
+            const Text(
+              '歩数データを使うと、\nペットが成長します',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'iPhone の歩数データを使って、散歩量に\n応じてペットの状態が変化します。',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.brown.shade400,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: onRequest,
+              icon: const Icon(Icons.favorite, size: 18),
+              label: const Text('許可する'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24, vertical: 12,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: onSkip,
+              child: Text(
+                'あとで',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey.shade500,
+                ),
+              ),
+            ),
+            Text(
+              'ヘルスケアの権限が有効になると\n歩数が反映されます',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.grey.shade400,
               ),
             ),
           ],
@@ -2547,85 +3400,157 @@ class _StepSection extends StatelessWidget {
 }
 
 // =============================================================
-// Permission Denied Section
+// Next Goal Banner — 次目標 & 受取可能ハイライト
 // =============================================================
 
-class _PermissionDeniedSection extends StatelessWidget {
-  final HealthPermissionStatus status;
-  final VoidCallback onRetry;
-  final VoidCallback onOpenSettings;
+class _NextGoalBanner extends StatelessWidget {
+  final List<RewardStatus> rewardStatuses;
+  final int currentSteps;
 
-  const _PermissionDeniedSection({
-    required this.status,
-    required this.onRetry,
-    required this.onOpenSettings,
+  const _NextGoalBanner({
+    required this.rewardStatuses,
+    required this.currentSteps,
   });
 
   @override
   Widget build(BuildContext context) {
-    final (icon, color, message, hint, showSettings) = switch (status) {
-      HealthPermissionStatus.denied => (
-          Icons.lock_outline,
-          Colors.orange,
-          '歩数データの利用が許可されていません',
-          '設定アプリ > ヘルスケア >\nデータアクセスとデバイス から許可できます',
-          true,
-        ),
-      HealthPermissionStatus.unavailable => (
-          Icons.phone_android,
-          Colors.orange,
-          '健康データを利用できません',
-          'Health Connect がインストールされて\nいない可能性があります。',
-          false,
-        ),
-      _ => (
-          Icons.cloud_off,
-          Colors.grey,
-          '歩数データの取得でエラーが起きました',
-          'しばらくしてからもう一度お試しください。',
-          false,
-        ),
-    };
+    if (rewardStatuses.isEmpty) return const SizedBox.shrink();
 
-    return Card(
-      elevation: 2,
-      color: color.shade50,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Icon(icon, size: 36, color: color),
-            const SizedBox(height: 10),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              hint,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-            ),
-            const SizedBox(height: 16),
-            if (showSettings)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: ElevatedButton.icon(
-                  onPressed: onOpenSettings,
-                  icon: const Icon(Icons.settings, size: 18),
-                  label: const Text('設定を開く'),
+    // 受取可能な報酬を探す
+    final available =
+        rewardStatuses.where((rs) => rs.status == RewardStatusType.available);
+    if (available.isNotEmpty) {
+      return _buildBanner(
+        gradient: LinearGradient(
+          colors: [Colors.amber.shade200, Colors.orange.shade200],
+        ),
+        emoji: '🎁',
+        title: '受け取れる報酬が ${available.length}個 あります！',
+        titleColor: Colors.brown.shade800,
+        subtitle: '報酬を受け取って、もちものから食べさせよう！',
+        subtitleColor: Colors.brown.shade500,
+        trailing: const Icon(Icons.arrow_downward, size: 18),
+      );
+    }
+
+    // 次のロック中報酬を探す
+    final nextLocked = rewardStatuses
+        .where((rs) => rs.status == RewardStatusType.locked)
+        .toList();
+    if (nextLocked.isNotEmpty) {
+      final next = nextLocked.first;
+      final remaining = next.food.requiredSteps - currentSteps;
+      return _buildBanner(
+        color: Colors.blue.shade50,
+        borderColor: Colors.blue.shade100,
+        emoji: foodEmoji(next.food.id),
+        title: 'あと $remaining歩で ${next.food.name}！',
+        titleColor: Colors.blue.shade800,
+        subtitle: '歩いて食材をみつけよう 🚶',
+        subtitleColor: Colors.blue.shade400,
+      );
+    }
+
+    // 全て受取済み
+    return _buildBanner(
+      color: Colors.green.shade50,
+      emoji: '✅',
+      title: 'きょうの報酬はすべて受取済み！',
+      titleColor: Colors.green.shade700,
+      subtitle: '今日はひと休み。明日も歩こう！',
+      subtitleColor: Colors.green.shade400,
+    );
+  }
+
+  Widget _buildBanner({
+    Gradient? gradient,
+    Color? color,
+    Color? borderColor,
+    required String emoji,
+    required String title,
+    required Color titleColor,
+    required String subtitle,
+    required Color subtitleColor,
+    Widget? trailing,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: gradient,
+        color: gradient == null ? color : null,
+        borderRadius: BorderRadius.circular(12),
+        border: borderColor != null ? Border.all(color: borderColor) : null,
+      ),
+      child: Row(
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 24)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: titleColor,
+                  ),
                 ),
-              ),
-            OutlinedButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('もう一度試す'),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: subtitleColor,
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
+          ?trailing,
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================
+// Inventory Shortcut — もちもの導線
+// =============================================================
+
+class _InventoryShortcut extends StatelessWidget {
+  final List<InventoryItem> inventory;
+  final VoidCallback onTap;
+
+  const _InventoryShortcut({
+    required this.inventory,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // 在庫がなければ非表示
+    final totalCount =
+        inventory.fold<int>(0, (sum, item) => sum + item.count);
+    if (totalCount <= 0) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: OutlinedButton.icon(
+        onPressed: onTap,
+        icon: const Text('🍽️', style: TextStyle(fontSize: 18)),
+        label: Text(
+          'ごはんをあげる（もちもの $totalCount個）',
+          style: const TextStyle(fontSize: 14),
+        ),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          side: BorderSide(color: Colors.brown.shade200),
         ),
       ),
     );

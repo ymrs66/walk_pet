@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/datasources/local_datasource.dart';
@@ -6,6 +7,7 @@ import '../../data/repositories/health_repository.dart';
 import '../../data/repositories/game_repository.dart';
 import '../../data/repositories/save_repository.dart';
 import '../../core/config/debug_config.dart';
+import '../../core/pet_dialogue_resolver.dart';
 import '../../data/models/step_state.dart';
 import '../../data/models/pet.dart';
 import '../../data/models/pet_emotion.dart';
@@ -13,8 +15,10 @@ import '../../data/models/inventory_item.dart';
 import '../../data/models/daily_reward_state.dart';
 import '../../data/models/health_permission_status.dart';
 import '../../data/models/food.dart';
+import '../../data/models/streak_state.dart';
 import '../../domain/services/reward_service.dart';
 import '../../domain/services/emotion_service.dart';
+import '../../domain/services/streak_service.dart';
 
 // =============================================================
 // Core Providers (依存注入)
@@ -99,17 +103,45 @@ final introShownProvider =
 
 class HealthPermissionNotifier extends StateNotifier<HealthPermissionStatus> {
   final HealthRepository _healthRepo;
+  bool _requesting = false; // 多重実行防止
 
   HealthPermissionNotifier(this._healthRepo)
       : super(HealthPermissionStatus.unknown);
 
+  /// 権限状態を確認するだけ（ダイアログは出さない）
   Future<void> check() async {
-    state = await _healthRepo.checkPermissionStatus();
+    final result = await _healthRepo.checkPermissionStatus();
+    debugPrint('[HealthPermission] check() → $result');
+    state = result;
   }
 
+  /// requestAuthorization を実行（ダイアログが出る可能性あり）
   Future<HealthPermissionStatus> request() async {
-    state = await _healthRepo.requestPermission();
-    return state;
+    if (_requesting) {
+      debugPrint('[HealthPermission] request() スキップ（実行中）');
+      return state;
+    }
+    _requesting = true;
+    try {
+      final result = await _healthRepo.requestPermission();
+      debugPrint('[HealthPermission] request() → $result');
+      state = result;
+      return result;
+    } finally {
+      _requesting = false;
+    }
+  }
+
+  /// 初回起動用: check → 未許可なら自動で request（1回だけ）
+  Future<void> ensureAuthorized() async {
+    final checkResult = await _healthRepo.checkPermissionStatus();
+    debugPrint('[HealthPermission] ensureAuthorized() check → $checkResult');
+    state = checkResult;
+
+    if (checkResult != HealthPermissionStatus.granted) {
+      debugPrint('[HealthPermission] ensureAuthorized() → request 実行');
+      await request();
+    }
   }
 }
 
@@ -220,6 +252,53 @@ final rewardStateProvider =
   return RewardNotifier(ref.watch(gameRepositoryProvider));
 });
 
+// =============================================================
+// Streak Provider
+// =============================================================
+
+class StreakNotifier extends StateNotifier<StreakState> {
+  final LocalDatasource _datasource;
+
+  StreakNotifier(this._datasource) : super(_datasource.loadStreak());
+
+  /// streak を更新 (歩数取得時に呼ばれる)
+  Future<List<StreakBonus>> updateToday(int todaySteps) async {
+    final todayDate = StreakState.dateStringFrom(DateTime.now());
+    final updated = StreakService.updateStreak(state, todaySteps, todayDate);
+
+    if (updated.lastSuccessDate != state.lastSuccessDate ||
+        updated.currentStreak != state.currentStreak) {
+      // streak が変化した場合のみ保存
+      await _datasource.saveStreak(updated);
+      state = updated;
+    }
+
+    // ボーナスチェック
+    final bonusResult = StreakService.checkBonus(state);
+    return bonusResult.bonuses;
+  }
+
+  /// ボーナスを受取済みにする
+  Future<void> claimBonus(StreakBonus bonus) async {
+    final updated = StreakService.claimBonus(state, bonus);
+    await _datasource.saveStreak(updated);
+    state = updated;
+  }
+
+  void refresh() {
+    state = _datasource.loadStreak();
+  }
+}
+
+final streakProvider =
+    StateNotifierProvider<StreakNotifier, StreakState>((ref) {
+  return StreakNotifier(ref.watch(localDatasourceProvider));
+});
+
+// =============================================================
+// Reward Status Provider
+// =============================================================
+
 final rewardStatusListProvider = Provider<List<RewardStatus>>((ref) {
   final stepAsync = ref.watch(stepProvider);
   final rewardState = ref.watch(rewardStateProvider);
@@ -230,6 +309,25 @@ final rewardStatusListProvider = Provider<List<RewardStatus>>((ref) {
     loading: () => [],
     error: (_, _) => [],
   );
+});
+
+// =============================================================
+// Dialogue Context Provider
+// =============================================================
+
+final dialogueContextProvider = Provider<DialogueContext>((ref) {
+  final rewardStatuses = ref.watch(rewardStatusListProvider);
+  final streak = ref.watch(streakProvider);
+
+  // 受取可能報酬があれば最優先
+  final hasAvailable =
+      rewardStatuses.any((rs) => rs.status == RewardStatusType.available);
+  if (hasAvailable) return DialogueContext.rewardAvailable;
+
+  // 連続達成中 (2日以上)
+  if (streak.currentStreak >= 2) return DialogueContext.onStreak;
+
+  return DialogueContext.normal;
 });
 
 // =============================================================
@@ -274,6 +372,24 @@ class GameActions {
 
   void refreshSteps() {
     _ref.invalidate(stepProvider);
+  }
+
+  /// streak を更新し、ボーナスがあれば付与
+  Future<List<StreakBonus>> checkAndUpdateStreak() async {
+    final stepState = await _ref.read(stepProvider.future);
+    final bonuses =
+        await _ref.read(streakProvider.notifier).updateToday(stepState.steps);
+
+    // ボーナス付与
+    for (final bonus in bonuses) {
+      await _gameRepo.addFood('kinomi'); // きのみ1個
+      await _ref.read(streakProvider.notifier).claimBonus(bonus);
+    }
+    if (bonuses.isNotEmpty) {
+      _ref.read(inventoryProvider.notifier).refresh();
+    }
+
+    return bonuses;
   }
 
   // =============================================================

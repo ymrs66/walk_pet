@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/pet.dart';
 import '../models/inventory_item.dart';
 import '../models/daily_reward_state.dart';
+import '../models/streak_state.dart';
 
 /// SharedPreferencesを使ったローカルデータソース
 class LocalDatasource {
@@ -12,6 +13,7 @@ class LocalDatasource {
   static const _onboardingKey = 'onboarding_completed';
   static const _introShownKey = 'intro_shown';
   static const _lastFedAtKey = 'last_fed_at';
+  static const _streakKey = 'streak_data';
 
   final SharedPreferences _prefs;
 
@@ -91,5 +93,17 @@ class LocalDatasource {
     final str = _prefs.getString(_lastFedAtKey);
     if (str == null) return null;
     return DateTime.tryParse(str);
+  }
+
+  // --- Streak ---
+
+  Future<void> saveStreak(StreakState state) async {
+    await _prefs.setString(_streakKey, jsonEncode(state.toJson()));
+  }
+
+  StreakState loadStreak() {
+    final json = _prefs.getString(_streakKey);
+    if (json == null) return const StreakState();
+    return StreakState.fromJson(jsonDecode(json) as Map<String, dynamic>);
   }
 }

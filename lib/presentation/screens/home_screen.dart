@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/pet.dart';
 import '../../data/models/food.dart';
+import '../../data/models/inventory_item.dart';
 import '../../data/models/step_state.dart' as models;
+import '../../data/models/streak_state.dart';
 import '../../data/models/health_permission_status.dart';
 import '../../domain/services/reward_service.dart';
+import '../../domain/services/streak_service.dart';
 import '../../domain/entities/pet_entity.dart';
 import '../../core/pet_stage_config.dart';
 import '../../core/pet_dialogue_resolver.dart';
@@ -42,10 +45,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     Future.microtask(() {
-      ref.read(healthPermissionProvider.notifier).check().then((_) {
+      ref.read(healthPermissionProvider.notifier).ensureAuthorized().then((_) {
         final status = ref.read(healthPermissionProvider);
         if (status == HealthPermissionStatus.granted) {
           ref.read(gameActionsProvider).refreshSteps();
+          // streak 更新
+          ref.read(gameActionsProvider).checkAndUpdateStreak().then((bonuses) {
+            if (bonuses.isNotEmpty && mounted) {
+              _showStreakBonusDialog(context, bonuses);
+            }
+          });
         }
       });
       ref.read(emotionProvider.notifier).refresh();
@@ -64,6 +73,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       ref.read(healthPermissionProvider.notifier).check();
       ref.read(gameActionsProvider).refreshSteps();
       ref.read(emotionProvider.notifier).refresh();
+      ref.read(gameActionsProvider).checkAndUpdateStreak();
     }
   }
 
@@ -133,6 +143,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final permissionStatus = ref.watch(healthPermissionProvider);
     final gameActions = ref.read(gameActionsProvider);
     final emotion = ref.watch(emotionProvider);
+    final streak = ref.watch(streakProvider);
+    final dialogueContext = ref.watch(dialogueContextProvider);
 
 
 
@@ -188,10 +200,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 ),
               ),
 
-            _PetSection(pet: pet, emotion: emotion),
+            _PetSection(
+              pet: pet,
+              emotion: emotion,
+              dialogueContext: dialogueContext,
+            ),
             const SizedBox(height: 20),
-            _buildStepSection(permissionStatus, stepAsync, ref),
+            _buildStepSection(permissionStatus, stepAsync, ref, streak),
             const SizedBox(height: 20),
+            // 次目標 & 受取可能バナー
+            _NextGoalBanner(
+              rewardStatuses: rewardStatuses,
+              currentSteps: stepAsync.valueOrNull?.steps ?? 0,
+            ),
+            const SizedBox(height: 12),
             _RewardSection(
               rewardStatuses: rewardStatuses,
               currentSteps: stepAsync.valueOrNull?.steps ?? 0,
@@ -205,6 +227,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     ),
                   );
                 }
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // もちもの導線
+            _InventoryShortcut(
+              inventory: ref.watch(inventoryProvider),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                      builder: (_) => const InventoryScreen()),
+                );
               },
             ),
             const SizedBox(height: 20),
@@ -233,10 +267,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     HealthPermissionStatus permissionStatus,
     AsyncValue<models.StepState> stepAsync,
     WidgetRef ref,
+    StreakState streak,
   ) {
     // 許可済み → 歩数表示
     if (permissionStatus == HealthPermissionStatus.granted) {
-      return _StepSection(stepAsync: stepAsync);
+      return _StepSection(stepAsync: stepAsync, streak: streak);
     }
 
     // 確認中
@@ -268,11 +303,99 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             await ref.read(healthPermissionProvider.notifier).request();
         if (result == HealthPermissionStatus.granted) {
           ref.read(gameActionsProvider).refreshSteps();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('✓ 歩数データを許可しました！'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
         }
       },
       onSkip: () {
         // 何もしない（カードはそのまま残るが操作は妨げない）
       },
+    );
+  }
+
+  /// streak ボーナス獲得ダイアログ
+  void _showStreakBonusDialog(
+      BuildContext context, List<StreakBonus> bonuses) {
+    final streak = ref.read(streakProvider);
+    final emoji = bonuses.any((b) => b == StreakBonus.day7) ? '🎊' : '🎉';
+    final title = bonuses.map((b) {
+      switch (b) {
+        case StreakBonus.day3:
+          return '3日連続達成！';
+        case StreakBonus.day7:
+          return '7日連続達成！';
+      }
+    }).join(' & ');
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Row(
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 28)),
+            const SizedBox(width: 8),
+            Expanded(child: Text(title)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '🔥 ${streak.currentStreak}日連続おさんぽ！',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(foodEmoji('kinomi'),
+                      style: const TextStyle(fontSize: 24)),
+                  const SizedBox(width: 8),
+                  Text(
+                    'きのみ ×${bonuses.length} ゲット！',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.brown.shade700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'まいにち歩いてくれてありがとう！',
+              style: TextStyle(
+                  fontSize: 13, color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('やったー！', style: TextStyle(fontSize: 16)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -321,8 +444,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 class _PetSection extends StatelessWidget {
   final Pet pet;
   final PetEmotion emotion;
+  final DialogueContext dialogueContext;
 
-  const _PetSection({required this.pet, required this.emotion});
+  const _PetSection({
+    required this.pet,
+    required this.emotion,
+    this.dialogueContext = DialogueContext.normal,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -331,7 +459,11 @@ class _PetSection extends StatelessWidget {
     final config = PetStageConfig.forStage(pet.stage);
     final isMaxStage = pet.stage == PetStage.stage3;
 
-    final hitokoto = PetDialogueResolver.resolve(pet.stage, emotion);
+    final hitokoto = PetDialogueResolver.resolve(
+      pet.stage,
+      emotion,
+      context: dialogueContext,
+    );
 
     return Card(
       elevation: 2,
@@ -456,8 +588,9 @@ class _PetSection extends StatelessWidget {
 
 class _StepSection extends StatelessWidget {
   final AsyncValue<models.StepState> stepAsync;
+  final StreakState streak;
 
-  const _StepSection({required this.stepAsync});
+  const _StepSection({required this.stepAsync, required this.streak});
 
   @override
   Widget build(BuildContext context) {
@@ -466,47 +599,79 @@ class _StepSection extends StatelessWidget {
       color: const Color(0xFFE8F5E9),
       child: Padding(
         padding: const EdgeInsets.all(20),
-        child: Row(
+        child: Column(
           children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: const BoxDecoration(
-                color: Color(0xFFC8E6C9),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.directions_walk,
-                  size: 28, color: Colors.green.shade700),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'きょうのおさんぽ',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.green.shade700,
-                    ),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFC8E6C9),
+                    shape: BoxShape.circle,
                   ),
-                  stepAsync.when(
-                    data: (stepState) => Text(
-                      '${stepState.steps} 歩',
+                  child: Icon(Icons.directions_walk,
+                      size: 28, color: Colors.green.shade700),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'きょうのおさんぽ',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.green.shade700,
+                        ),
+                      ),
+                      stepAsync.when(
+                        data: (stepState) => Text(
+                          '${stepState.steps} 歩',
+                          style: TextStyle(
+                            fontSize: 30,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green.shade900,
+                          ),
+                        ),
+                        loading: () => const Text('読み込み中...'),
+                        error: (e, _) => const Text(
+                          '歩数を取得できませんでした',
+                          style: TextStyle(color: Colors.red),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            // streak バッジ
+            if (streak.currentStreak >= 1) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('🔥', style: TextStyle(fontSize: 16)),
+                    const SizedBox(width: 4),
+                    Text(
+                      '連続 ${streak.currentStreak}日',
                       style: TextStyle(
-                        fontSize: 30,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
-                        color: Colors.green.shade900,
+                        color: Colors.orange.shade800,
                       ),
                     ),
-                    loading: () => const Text('読み込み中...'),
-                    error: (e, _) => const Text(
-                      '歩数を取得できませんでした',
-                      style: TextStyle(color: Colors.red),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),
@@ -654,6 +819,164 @@ class _PermissionRequestSection extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================
+// Next Goal Banner — 次目標 & 受取可能ハイライト
+// =============================================================
+
+class _NextGoalBanner extends StatelessWidget {
+  final List<RewardStatus> rewardStatuses;
+  final int currentSteps;
+
+  const _NextGoalBanner({
+    required this.rewardStatuses,
+    required this.currentSteps,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (rewardStatuses.isEmpty) return const SizedBox.shrink();
+
+    // 受取可能な報酬を探す
+    final available =
+        rewardStatuses.where((rs) => rs.status == RewardStatusType.available);
+    if (available.isNotEmpty) {
+      return _buildBanner(
+        gradient: LinearGradient(
+          colors: [Colors.amber.shade200, Colors.orange.shade200],
+        ),
+        emoji: '🎁',
+        title: '受け取れる報酬が ${available.length}個 あります！',
+        titleColor: Colors.brown.shade800,
+        subtitle: '報酬を受け取って、もちものから食べさせよう！',
+        subtitleColor: Colors.brown.shade500,
+        trailing: const Icon(Icons.arrow_downward, size: 18),
+      );
+    }
+
+    // 次のロック中報酬を探す
+    final nextLocked = rewardStatuses
+        .where((rs) => rs.status == RewardStatusType.locked)
+        .toList();
+    if (nextLocked.isNotEmpty) {
+      final next = nextLocked.first;
+      final remaining = next.food.requiredSteps - currentSteps;
+      return _buildBanner(
+        color: Colors.blue.shade50,
+        borderColor: Colors.blue.shade100,
+        emoji: foodEmoji(next.food.id),
+        title: 'あと $remaining歩で ${next.food.name}！',
+        titleColor: Colors.blue.shade800,
+        subtitle: '歩いて食材をみつけよう 🚶',
+        subtitleColor: Colors.blue.shade400,
+      );
+    }
+
+    // 全て受取済み
+    return _buildBanner(
+      color: Colors.green.shade50,
+      emoji: '✅',
+      title: 'きょうの報酬はすべて受取済み！',
+      titleColor: Colors.green.shade700,
+      subtitle: '今日はひと休み。明日も歩こう！',
+      subtitleColor: Colors.green.shade400,
+    );
+  }
+
+  Widget _buildBanner({
+    Gradient? gradient,
+    Color? color,
+    Color? borderColor,
+    required String emoji,
+    required String title,
+    required Color titleColor,
+    required String subtitle,
+    required Color subtitleColor,
+    Widget? trailing,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: gradient,
+        color: gradient == null ? color : null,
+        borderRadius: BorderRadius.circular(12),
+        border: borderColor != null ? Border.all(color: borderColor) : null,
+      ),
+      child: Row(
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 24)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: titleColor,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: subtitleColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ?trailing,
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================
+// Inventory Shortcut — もちもの導線
+// =============================================================
+
+class _InventoryShortcut extends StatelessWidget {
+  final List<InventoryItem> inventory;
+  final VoidCallback onTap;
+
+  const _InventoryShortcut({
+    required this.inventory,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // 在庫がなければ非表示
+    final totalCount =
+        inventory.fold<int>(0, (sum, item) => sum + item.count);
+    if (totalCount <= 0) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: OutlinedButton.icon(
+        onPressed: onTap,
+        icon: const Text('🍽️', style: TextStyle(fontSize: 18)),
+        label: Text(
+          'ごはんをあげる（もちもの $totalCount個）',
+          style: const TextStyle(fontSize: 14),
+        ),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          side: BorderSide(color: Colors.brown.shade200),
         ),
       ),
     );

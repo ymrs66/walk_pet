@@ -1,11 +1,18 @@
-import '../../data/models/pet.dart';
-import '../../data/models/pet_emotion.dart';
+import '../data/models/pet.dart';
+import '../data/models/pet_emotion.dart';
 
-/// stage × emotion からひとこと文言を解決する
+/// セリフの文脈
+enum DialogueContext {
+  normal, // 通常時
+  rewardAvailable, // 報酬受取可能
+  onStreak, // 連続達成中
+}
+
+/// stage × emotion × context からひとこと文言を解決する
 ///
 /// 将来: JSON化やランダム化が容易な構造
 class PetDialogueResolver {
-  /// stage × emotion → ひとこと文言リスト
+  /// stage × emotion → ひとこと文言リスト (既存)
   static const Map<PetStage, Map<PetEmotion, List<String>>> _dialogues = {
     PetStage.stage1: {
       PetEmotion.normal: [
@@ -60,9 +67,37 @@ class PetDialogueResolver {
     },
   };
 
-  /// stage × emotion からひとこと文言を取得
-  /// 時刻ベースでセミランダム選択 (将来 Random に変更可能)
-  static String resolve(PetStage stage, PetEmotion emotion) {
+  /// context別の追加セリフ（stage共通）
+  static const Map<DialogueContext, List<String>> _contextDialogues = {
+    DialogueContext.rewardAvailable: [
+      'おみやげがあるみたい！',
+      '何かみつけたよ！受け取って！',
+      'プレゼントがとどいてるよ♪',
+    ],
+    DialogueContext.onStreak: [
+      'れんぞくおさんぽ、すごい！',
+      'まいにちたのしいね！',
+      'きょうもいっしょにあるけた♪',
+    ],
+  };
+
+  /// stage × emotion × context からひとこと文言を取得
+  /// context がマッチした場合はそちらを優先表示
+  static String resolve(
+    PetStage stage,
+    PetEmotion emotion, {
+    DialogueContext context = DialogueContext.normal,
+  }) {
+    // context 専用セリフがあればそちらを優先
+    if (context != DialogueContext.normal) {
+      final contextList = _contextDialogues[context];
+      if (contextList != null && contextList.isNotEmpty) {
+        return contextList[
+            DateTime.now().millisecondsSinceEpoch % contextList.length];
+      }
+    }
+
+    // 通常セリフ
     final emotionMap = _dialogues[stage];
     if (emotionMap == null) return '…';
 
