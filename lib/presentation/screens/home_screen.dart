@@ -42,8 +42,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     Future.microtask(() {
-      ref.read(healthPermissionProvider.notifier).check();
-      ref.read(gameActionsProvider).refreshSteps();
+      ref.read(healthPermissionProvider.notifier).ensureAuthorized().then((_) {
+        final status = ref.read(healthPermissionProvider);
+        if (status == HealthPermissionStatus.granted) {
+          ref.read(gameActionsProvider).refreshSteps();
+        }
+      });
       ref.read(emotionProvider.notifier).refresh();
       _showIntroIfNeeded();
     });
@@ -258,6 +262,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         if (result == HealthPermissionStatus.granted) {
           ref.read(gameActionsProvider).refreshSteps();
         }
+      },
+      onOpenSettings: () async {
+        await ref.read(healthPermissionProvider.notifier).openSettings();
       },
     );
   }
@@ -507,32 +514,37 @@ class _StepSection extends StatelessWidget {
 class _PermissionDeniedSection extends StatelessWidget {
   final HealthPermissionStatus status;
   final VoidCallback onRetry;
+  final VoidCallback onOpenSettings;
 
   const _PermissionDeniedSection({
     required this.status,
     required this.onRetry,
+    required this.onOpenSettings,
   });
 
   @override
   Widget build(BuildContext context) {
-    final (icon, color, message, hint) = switch (status) {
+    final (icon, color, message, hint, showSettings) = switch (status) {
       HealthPermissionStatus.denied => (
           Icons.lock_outline,
           Colors.orange,
           '歩数データの利用が許可されていません',
-          '設定アプリから後で許可できます。\n歩数なしでもアプリは遊べます。',
+          '設定アプリ > ヘルスケア >\nデータアクセスとデバイス から許可できます',
+          true,
         ),
       HealthPermissionStatus.unavailable => (
           Icons.phone_android,
           Colors.orange,
           '健康データを利用できません',
           'Health Connect がインストールされて\nいない可能性があります。',
+          false,
         ),
       _ => (
           Icons.cloud_off,
           Colors.grey,
           '歩数データの取得でエラーが起きました',
           'しばらくしてからもう一度お試しください。',
+          false,
         ),
     };
 
@@ -560,6 +572,15 @@ class _PermissionDeniedSection extends StatelessWidget {
               style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
             ),
             const SizedBox(height: 16),
+            if (showSettings)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: ElevatedButton.icon(
+                  onPressed: onOpenSettings,
+                  icon: const Icon(Icons.settings, size: 18),
+                  label: const Text('設定を開く'),
+                ),
+              ),
             OutlinedButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh, size: 18),

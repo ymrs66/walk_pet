@@ -12,6 +12,9 @@ abstract class HealthRepository {
 
   /// 現在の権限状態を確認 (権限要求なし)
   Future<HealthPermissionStatus> checkPermissionStatus();
+
+  /// 設定画面を開く
+  Future<void> openSettings();
 }
 
 // =============================================================
@@ -42,6 +45,11 @@ class RealHealthRepository implements HealthRepository {
   Future<HealthPermissionStatus> checkPermissionStatus() async {
     return _datasource.checkStepPermission();
   }
+
+  @override
+  Future<void> openSettings() async {
+    await _datasource.openSettings();
+  }
 }
 
 // =============================================================
@@ -70,5 +78,10 @@ class DummyHealthRepository implements HealthRepository {
   @override
   Future<HealthPermissionStatus> checkPermissionStatus() async {
     return HealthPermissionStatus.granted;
+  }
+
+  @override
+  Future<void> openSettings() async {
+    // ダミー: 何もしない
   }
 }
