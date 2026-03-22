@@ -46,7 +46,9 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>NSHealthShareUsageDescription</key>
-	<string>歩数データを読み取ってゲーム内の報酬に反映します</string>
+	<string>ペットの散歩や健康管理機能に関連して、歩数や健康データを取得し、アプリ内で表示するために使用します。</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>ペットの散歩や健康管理機能に関連して、歩数や健康データをアプリ内に反映するために使用します。</string>
 	<key>GADApplicationIdentifier</key>
 	<string>ca-app-pub-3940256099942544~1458002511</string>
 </dict>
