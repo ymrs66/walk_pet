@@ -65,6 +65,211 @@ class WalkPetApp extends ConsumerWidget {
 }
 
 
+# ===== FILE: test/daily_reward_state_test.dart =====
+import 'package:flutter_test/flutter_test.dart';
+import 'package:walk_pet/data/models/daily_reward_state.dart';
+
+void main() {
+  group('DailyRewardState', () {
+    test('today() はきょうの日付で生成される', () {
+      final state = DailyRewardState.today();
+      final now = DateTime.now();
+      final expected =
+          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      expect(state.date, expected);
+      expect(state.claimedRewardIds, isEmpty);
+      expect(state.isToday, isTrue);
+    });
+
+    test('昨日の日付は isToday = false', () {
+      final yesterday = DateTime.now().subtract(const Duration(days: 1));
+      final dateStr =
+          '${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}';
+      final state = DailyRewardState(date: dateStr, claimedRewardIds: ['kinomi']);
+      expect(state.isToday, isFalse);
+    });
+
+    test('claim() で受取IDが追加される', () {
+      final state = DailyRewardState.today();
+      expect(state.hasClaimed('kinomi'), isFalse);
+
+      final claimed = state.claim('kinomi');
+      expect(claimed.hasClaimed('kinomi'), isTrue);
+      expect(claimed.claimedRewardIds, ['kinomi']);
+    });
+
+    test('claim() は元の state を変更しない（イミュータブル）', () {
+      final state = DailyRewardState.today();
+      state.claim('kinomi');
+      expect(state.hasClaimed('kinomi'), isFalse);
+    });
+
+    test('toJson / fromJson で往復できる', () {
+      final state = DailyRewardState.today().claim('kinomi').claim('ninjin');
+      final json = state.toJson();
+      final restored = DailyRewardState.fromJson(json);
+      expect(restored.date, state.date);
+      expect(restored.claimedRewardIds, state.claimedRewardIds);
+    });
+  });
+}
+
+
+# ===== FILE: test/emotion_service_test.dart =====
+import 'package:flutter_test/flutter_test.dart';
+import 'package:walk_pet/domain/services/emotion_service.dart';
+import 'package:walk_pet/data/models/pet_emotion.dart';
+
+void main() {
+  group('EmotionService.resolve', () {
+    test('lastFedAt が null → hungry', () {
+      expect(EmotionService.resolve(null), PetEmotion.hungry);
+    });
+
+    test('餌やり直後（30分前） → happy', () {
+      final lastFed = DateTime.now().subtract(const Duration(minutes: 30));
+      expect(EmotionService.resolve(lastFed), PetEmotion.happy);
+    });
+
+    test('1時間以内（59分前） → happy', () {
+      final lastFed = DateTime.now().subtract(const Duration(minutes: 59));
+      expect(EmotionService.resolve(lastFed), PetEmotion.happy);
+    });
+
+    test('1時間1分前 → normal', () {
+      final lastFed = DateTime.now().subtract(const Duration(hours: 1, minutes: 1));
+      expect(EmotionService.resolve(lastFed), PetEmotion.normal);
+    });
+
+    test('3時間前 → normal', () {
+      final lastFed = DateTime.now().subtract(const Duration(hours: 3));
+      expect(EmotionService.resolve(lastFed), PetEmotion.normal);
+    });
+
+    test('ちょうど6時間前 → normal（境界値）', () {
+      final lastFed = DateTime.now().subtract(const Duration(hours: 6));
+      expect(EmotionService.resolve(lastFed), PetEmotion.normal);
+    });
+
+    test('6時間1分前 → hungry', () {
+      final lastFed = DateTime.now().subtract(const Duration(hours: 6, minutes: 1));
+      expect(EmotionService.resolve(lastFed), PetEmotion.hungry);
+    });
+
+    test('24時間前 → hungry', () {
+      final lastFed = DateTime.now().subtract(const Duration(hours: 24));
+      expect(EmotionService.resolve(lastFed), PetEmotion.hungry);
+    });
+  });
+}
+
+
+# ===== FILE: test/game_repository_test.dart =====
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:walk_pet/data/datasources/local_datasource.dart';
+import 'package:walk_pet/data/repositories/game_repository.dart';
+import 'package:walk_pet/data/models/pet.dart';
+import 'package:walk_pet/data/models/inventory_item.dart';
+
+void main() {
+  late SharedPreferences prefs;
+  late LocalDatasource datasource;
+  late GameRepository repo;
+
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    prefs = await SharedPreferences.getInstance();
+    datasource = LocalDatasource(prefs);
+    repo = GameRepository(datasource);
+  });
+
+  group('GameRepository.claimReward', () {
+    test('歩数条件を満たしていれば報酬受取成功', () async {
+      // kinomi は 1000歩で受取可能
+      final result = await repo.claimReward('kinomi', 1500);
+      expect(result.success, isTrue);
+      expect(result.rewardState.hasClaimed('kinomi'), isTrue);
+      // 在庫に追加されている
+      final kinomi = result.inventory.firstWhere((i) => i.foodId == 'kinomi');
+      expect(kinomi.count, 1);
+    });
+
+    test('歩数不足だと受取失敗', () async {
+      final result = await repo.claimReward('kinomi', 500);
+      expect(result.success, isFalse);
+      expect(result.rewardState.hasClaimed('kinomi'), isFalse);
+    });
+
+    test('二重受取は失敗', () async {
+      await repo.claimReward('kinomi', 1500);
+      final result2 = await repo.claimReward('kinomi', 1500);
+      expect(result2.success, isFalse);
+      // 在庫は1つのまま
+      final kinomi = result2.inventory.firstWhere((i) => i.foodId == 'kinomi');
+      expect(kinomi.count, 1);
+    });
+
+    test('存在しない食材IDは失敗', () async {
+      final result = await repo.claimReward('unknown_food', 9999);
+      expect(result.success, isFalse);
+    });
+  });
+
+  group('GameRepository.feedPet', () {
+    test('在庫があれば餌やり成功 — 在庫減少・EXP加算', () async {
+      // 先に食材を追加
+      await repo.addFood('kinomi');
+      final inv = repo.loadInventory();
+      expect(inv.first.count, 1);
+
+      // 餌やり実行
+      final result = await repo.feedPet('kinomi');
+      expect(result.success, isTrue);
+
+      // EXP が増えている (kinomi = EXP +1)
+      expect(result.pet.exp, 1);
+
+      // 在庫が減っている（0個なのでリストから消える）
+      expect(result.inventory.where((i) => i.foodId == 'kinomi'), isEmpty);
+    });
+
+    test('在庫ゼロだと餌やり失敗', () async {
+      final result = await repo.feedPet('kinomi');
+      expect(result.success, isFalse);
+      expect(result.pet.exp, 0);
+    });
+
+    test('複数回の餌やりでEXPが累積する', () async {
+      await repo.addFood('ninjin'); // EXP +3
+      await repo.addFood('ninjin');
+
+      final r1 = await repo.feedPet('ninjin');
+      expect(r1.success, isTrue);
+      expect(r1.pet.exp, 3);
+
+      final r2 = await repo.feedPet('ninjin');
+      expect(r2.success, isTrue);
+      expect(r2.pet.exp, 6);
+    });
+
+    test('EXP蓄積でStageが上がる', () async {
+      // stage2 は EXP >= 5
+      for (var i = 0; i < 5; i++) {
+        await repo.addFood('kinomi'); // EXP +1 × 5 = 5
+      }
+      late var result;
+      for (var i = 0; i < 5; i++) {
+        result = await repo.feedPet('kinomi');
+      }
+      expect(result.success, isTrue);
+      expect(result.pet.exp, 5);
+      expect(result.pet.stage, PetStage.stage2);
+    });
+  });
+}
+
+
 # ===== FILE: test/widget_test.dart =====
 import 'package:flutter_test/flutter_test.dart';
 
@@ -443,22 +648,36 @@ class AdConfig {
 
 
 # ===== FILE: lib/core/config/debug_config.dart =====
+/// ─── アプリ動作モード切り替え ───
+///
+/// 切替方法: [currentMode] を変更するだけで歩数ソース・デバッグUI・広告が連動します。
+///
+///   AppMode.dev        → ダミー歩数 + デバッグUI + 広告OFF
+///   AppMode.testFlight → 実歩数    + デバッグUI + 広告OFF
+///   AppMode.release    → 実歩数    + UI非表示  + 広告ON
+enum AppMode { dev, testFlight, release }
+
 /// デバッグ設定
 ///
-/// 開発中のみ使用する設定を集約するファイル。
-/// リリース前に debugMode = false に変更すること。
+/// 各フラグは [currentMode] から自動導出されるため、
+/// 個別に書き換える必要はありません。
 class DebugConfig {
-  /// デバッグモード (true = 開発用機能を有効化)
-  static const bool debugMode = true;
+  // ↓ ここを変更するだけ ↓
+  static const AppMode currentMode = AppMode.testFlight;
 
-  /// ダミー歩数を使用する (Windows / macOS / Linux でのデバッグ用)
-  static const bool useDummyHealth = true;
+  // --- derived flags ---
+
+  /// デバッグモード (dev / testFlight で true)
+  static bool get debugMode => currentMode != AppMode.release;
+
+  /// ダミー歩数を使用する (dev のみ)
+  static bool get useDummyHealth => currentMode == AppMode.dev;
 
   /// ダミー歩数の値
   static const int dummySteps = 9000;
 
-  /// デバッグ情報をUI上に表示する
-  static const bool showDebugBanner = true;
+  /// デバッグ情報をUI上に表示する (dev のみ)
+  static bool get showDebugBanner => currentMode == AppMode.dev;
 }
 
 
@@ -564,6 +783,23 @@ class HealthDatasource {
       return steps;
     } catch (_) {
       return null;
+    }
+  }
+
+  /// 設定画面を開く
+  /// Android: Health Connect アプリをインストール / 起動
+  /// iOS: 設定画面のヘルスケア権限は OS 側で管理されるため
+  ///       再度 requestAuthorization を試行する
+  Future<void> openSettings() async {
+    try {
+      if (Platform.isAndroid) {
+        await _health.installHealthConnect();
+      }
+      // iOS: requestAuthorization を再実行することで
+      //       未表示のダイアログを出す。既に拒否済みなら何も起きないが
+      //       テキストで設定アプリへの誘導を表示している。
+    } catch (_) {
+      // 設定画面を開けない場合は無視
     }
   }
 }
@@ -1124,6 +1360,9 @@ abstract class HealthRepository {
 
   /// 現在の権限状態を確認 (権限要求なし)
   Future<HealthPermissionStatus> checkPermissionStatus();
+
+  /// 設定画面を開く
+  Future<void> openSettings();
 }
 
 // =============================================================
@@ -1154,6 +1393,11 @@ class RealHealthRepository implements HealthRepository {
   Future<HealthPermissionStatus> checkPermissionStatus() async {
     return _datasource.checkStepPermission();
   }
+
+  @override
+  Future<void> openSettings() async {
+    await _datasource.openSettings();
+  }
 }
 
 // =============================================================
@@ -1182,6 +1426,11 @@ class DummyHealthRepository implements HealthRepository {
   @override
   Future<HealthPermissionStatus> checkPermissionStatus() async {
     return HealthPermissionStatus.granted;
+  }
+
+  @override
+  Future<void> openSettings() async {
+    // ダミー: 何もしない
   }
 }
 
@@ -1503,7 +1752,11 @@ final healthDatasourceProvider = Provider<HealthDatasource>((ref) {
   return HealthDatasource();
 });
 
-/// DebugConfig で DummyHealthRepository / RealHealthRepository を切替
+/// HealthRepository の切替:
+///   AppMode.dev        → DummyHealthRepository (ダミー歩数)
+///   AppMode.testFlight → RealHealthRepository  (実歩数)
+///   AppMode.release    → RealHealthRepository  (実歩数)
+/// 切替は DebugConfig.currentMode を変更するだけでOK。
 final healthRepositoryProvider = Provider<HealthRepository>((ref) {
   if (DebugConfig.debugMode && DebugConfig.useDummyHealth) {
     return DummyHealthRepository(dummySteps: DebugConfig.dummySteps);
@@ -1577,6 +1830,19 @@ class HealthPermissionNotifier extends StateNotifier<HealthPermissionStatus> {
   Future<HealthPermissionStatus> request() async {
     state = await _healthRepo.requestPermission();
     return state;
+  }
+
+  /// 初回: check → 未許可なら自動で request まで実行
+  Future<void> ensureAuthorized() async {
+    state = await _healthRepo.checkPermissionStatus();
+    if (state != HealthPermissionStatus.granted) {
+      state = await _healthRepo.requestPermission();
+    }
+  }
+
+  /// 設定画面を開く
+  Future<void> openSettings() async {
+    await _healthRepo.openSettings();
   }
 }
 
@@ -1792,6 +2058,12 @@ import '../widgets/debug_panel.dart';
 import 'inventory_screen.dart';
 
 /// ホーム画面
+///
+/// v0.1 TestFlight 確認観点:
+/// - 今日何をすると良いか分かる（歩数 → 報酬 → 餌やり）
+/// - 「歩いた → 報酬受取 → 餌やり」の流れが迷わずできる
+/// - 余計な未実装感が出ない
+/// - 含む機能: オンボーディング / 歩数 / 報酬 / 在庫 / 餌やり / 成長 / 感情
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -1799,15 +2071,23 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with WidgetsBindingObserver {
   PetStage? _previousStage;
   final AdService _adService = AdService();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     Future.microtask(() {
-      ref.read(healthPermissionProvider.notifier).check();
+      ref.read(healthPermissionProvider.notifier).ensureAuthorized().then((_) {
+        final status = ref.read(healthPermissionProvider);
+        if (status == HealthPermissionStatus.granted) {
+          ref.read(gameActionsProvider).refreshSteps();
+        }
+      });
+      ref.read(emotionProvider.notifier).refresh();
       _showIntroIfNeeded();
     });
     // バナー広告読み込み
@@ -1818,7 +2098,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.read(healthPermissionProvider.notifier).check();
+      ref.read(gameActionsProvider).refreshSteps();
+      ref.read(emotionProvider.notifier).refresh();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _adService.dispose();
     super.dispose();
   }
@@ -1883,8 +2173,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final gameActions = ref.read(gameActionsProvider);
     final emotion = ref.watch(emotionProvider);
 
-    // 画面表示時に感情を再判定
-    ref.read(emotionProvider.notifier).refresh();
+
 
     // 成長段階が変わったら演出
     if (_previousStage != null && _previousStage != pet.stage) {
@@ -1896,7 +2185,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('あるくペット'),
+        title: Text(
+          DebugConfig.debugMode ? 'あるくペット (v0.1)' : 'あるくペット',
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.inventory_2),
@@ -1914,9 +2205,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         child: Column(
           children: [
             // デバッグバナー
-            if (DebugConfig.debugMode &&
-                DebugConfig.useDummyHealth &&
-                DebugConfig.showDebugBanner)
+            if (DebugConfig.showDebugBanner)
               Container(
                 width: double.infinity,
                 margin: const EdgeInsets.only(bottom: 12),
@@ -1962,33 +2251,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             // デバッグパネル (debugMode時のみ)
             const DebugPanel(),
             const SizedBox(height: 12),
-
-            // 励まし文
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(
-                '🌿 きょうもおさんぽしよう',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.green.shade600,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ),
-
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const InventoryScreen()),
-                  );
-                },
-                icon: const Icon(Icons.inventory_2),
-                label: const Text('もちものを見る'),
-              ),
-            ),
 
             // バナー広告
             if (_adService.isBannerLoaded && _adService.bannerAd != null)
@@ -2039,6 +2301,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         if (result == HealthPermissionStatus.granted) {
           ref.read(gameActionsProvider).refreshSteps();
         }
+      },
+      onOpenSettings: () async {
+        await ref.read(healthPermissionProvider.notifier).openSettings();
       },
     );
   }
@@ -2288,32 +2553,37 @@ class _StepSection extends StatelessWidget {
 class _PermissionDeniedSection extends StatelessWidget {
   final HealthPermissionStatus status;
   final VoidCallback onRetry;
+  final VoidCallback onOpenSettings;
 
   const _PermissionDeniedSection({
     required this.status,
     required this.onRetry,
+    required this.onOpenSettings,
   });
 
   @override
   Widget build(BuildContext context) {
-    final (icon, color, message, hint) = switch (status) {
+    final (icon, color, message, hint, showSettings) = switch (status) {
       HealthPermissionStatus.denied => (
           Icons.lock_outline,
           Colors.orange,
           '歩数データの利用が許可されていません',
-          '設定アプリから後で許可できます。\n歩数なしでもアプリは遊べます。',
+          '設定アプリ > ヘルスケア >\nデータアクセスとデバイス から許可できます',
+          true,
         ),
       HealthPermissionStatus.unavailable => (
           Icons.phone_android,
           Colors.orange,
           '健康データを利用できません',
           'Health Connect がインストールされて\nいない可能性があります。',
+          false,
         ),
       _ => (
           Icons.cloud_off,
           Colors.grey,
           '歩数データの取得でエラーが起きました',
           'しばらくしてからもう一度お試しください。',
+          false,
         ),
     };
 
@@ -2341,6 +2611,15 @@ class _PermissionDeniedSection extends StatelessWidget {
               style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
             ),
             const SizedBox(height: 16),
+            if (showSettings)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: ElevatedButton.icon(
+                  onPressed: onOpenSettings,
+                  icon: const Icon(Icons.settings, size: 18),
+                  label: const Text('設定を開く'),
+                ),
+              ),
             OutlinedButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh, size: 18),

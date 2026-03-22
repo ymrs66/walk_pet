@@ -111,19 +111,6 @@ class HealthPermissionNotifier extends StateNotifier<HealthPermissionStatus> {
     state = await _healthRepo.requestPermission();
     return state;
   }
-
-  /// 初回: check → 未許可なら自動で request まで実行
-  Future<void> ensureAuthorized() async {
-    state = await _healthRepo.checkPermissionStatus();
-    if (state != HealthPermissionStatus.granted) {
-      state = await _healthRepo.requestPermission();
-    }
-  }
-
-  /// 設定画面を開く
-  Future<void> openSettings() async {
-    await _healthRepo.openSettings();
-  }
 }
 
 final healthPermissionProvider = StateNotifierProvider<

@@ -101,21 +101,4 @@ class HealthDatasource {
       return null;
     }
   }
-
-  /// 設定画面を開く
-  /// Android: Health Connect アプリをインストール / 起動
-  /// iOS: 設定画面のヘルスケア権限は OS 側で管理されるため
-  ///       再度 requestAuthorization を試行する
-  Future<void> openSettings() async {
-    try {
-      if (Platform.isAndroid) {
-        await _health.installHealthConnect();
-      }
-      // iOS: requestAuthorization を再実行することで
-      //       未表示のダイアログを出す。既に拒否済みなら何も起きないが
-      //       テキストで設定アプリへの誘導を表示している。
-    } catch (_) {
-      // 設定画面を開けない場合は無視
-    }
-  }
 }

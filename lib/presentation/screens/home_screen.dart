@@ -42,7 +42,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     Future.microtask(() {
-      ref.read(healthPermissionProvider.notifier).ensureAuthorized().then((_) {
+      ref.read(healthPermissionProvider.notifier).check().then((_) {
         final status = ref.read(healthPermissionProvider);
         if (status == HealthPermissionStatus.granted) {
           ref.read(gameActionsProvider).refreshSteps();
@@ -234,6 +234,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     AsyncValue<models.StepState> stepAsync,
     WidgetRef ref,
   ) {
+    // 許可済み → 歩数表示
+    if (permissionStatus == HealthPermissionStatus.granted) {
+      return _StepSection(stepAsync: stepAsync);
+    }
+
+    // 確認中
     if (permissionStatus == HealthPermissionStatus.unknown) {
       return const Card(
         elevation: 2,
@@ -241,30 +247,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           padding: EdgeInsets.all(20),
           child: Row(
             children: [
-              Icon(Icons.directions_walk, size: 36, color: Colors.grey),
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
               SizedBox(width: 16),
-              Text('権限を確認中...'),
+              Text('歩数データを確認しています...'),
             ],
           ),
         ),
       );
     }
 
-    if (permissionStatus == HealthPermissionStatus.granted) {
-      return _StepSection(stepAsync: stepAsync);
-    }
-
-    return _PermissionDeniedSection(
+    // 未許可 / 拒否 / エラー → 許可要求セクション
+    return _PermissionRequestSection(
       status: permissionStatus,
-      onRetry: () async {
+      onRequest: () async {
         final result =
             await ref.read(healthPermissionProvider.notifier).request();
         if (result == HealthPermissionStatus.granted) {
           ref.read(gameActionsProvider).refreshSteps();
         }
       },
-      onOpenSettings: () async {
-        await ref.read(healthPermissionProvider.notifier).openSettings();
+      onSkip: () {
+        // 何もしない（カードはそのまま残るが操作は妨げない）
       },
     );
   }
@@ -508,83 +515,143 @@ class _StepSection extends StatelessWidget {
 }
 
 // =============================================================
-// Permission Denied Section
+// Permission Request Section — 歩数データの許可を促す
 // =============================================================
 
-class _PermissionDeniedSection extends StatelessWidget {
+class _PermissionRequestSection extends StatelessWidget {
   final HealthPermissionStatus status;
-  final VoidCallback onRetry;
-  final VoidCallback onOpenSettings;
+  final VoidCallback onRequest;
+  final VoidCallback onSkip;
 
-  const _PermissionDeniedSection({
+  const _PermissionRequestSection({
     required this.status,
-    required this.onRetry,
-    required this.onOpenSettings,
+    required this.onRequest,
+    required this.onSkip,
   });
 
   @override
   Widget build(BuildContext context) {
-    final (icon, color, message, hint, showSettings) = switch (status) {
-      HealthPermissionStatus.denied => (
-          Icons.lock_outline,
-          Colors.orange,
-          '歩数データの利用が許可されていません',
-          '設定アプリ > ヘルスケア >\nデータアクセスとデバイス から許可できます',
-          true,
+    // unavailable (Health Connect 未導入等)
+    if (status == HealthPermissionStatus.unavailable) {
+      return Card(
+        elevation: 2,
+        color: Colors.orange.shade50,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              const Icon(Icons.phone_android, size: 36, color: Colors.orange),
+              const SizedBox(height: 10),
+              const Text(
+                '健康データを利用できません',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '歩数機能が使えない端末の可能性があります。\n歩数なしでもアプリは遊べます。',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              ),
+            ],
+          ),
         ),
-      HealthPermissionStatus.unavailable => (
-          Icons.phone_android,
-          Colors.orange,
-          '健康データを利用できません',
-          'Health Connect がインストールされて\nいない可能性があります。',
-          false,
-        ),
-      _ => (
-          Icons.cloud_off,
-          Colors.grey,
-          '歩数データの取得でエラーが起きました',
-          'しばらくしてからもう一度お試しください。',
-          false,
-        ),
-    };
+      );
+    }
 
+    // error
+    if (status == HealthPermissionStatus.error) {
+      return Card(
+        elevation: 2,
+        color: Colors.grey.shade50,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              Icon(Icons.cloud_off, size: 36, color: Colors.grey.shade400),
+              const SizedBox(height: 10),
+              const Text(
+                '歩数データを取得できませんでした',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'しばらくしてからもう一度お試しください。',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: onRequest,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('再読み込み'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // denied / unknown以外 → 許可を促す
     return Card(
       elevation: 2,
-      color: color.shade50,
+      color: const Color(0xFFFFF8E1), // あたたかいイエロー
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            Icon(icon, size: 36, color: color),
+            const Text('🚶', style: TextStyle(fontSize: 36)),
             const SizedBox(height: 10),
-            Text(
-              message,
+            const Text(
+              '歩数データを使うと、\nペットが成長します',
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
-              hint,
+              'iPhone の歩数データを使って、散歩量に\n応じてペットの状態が変化します。',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.brown.shade400,
+                height: 1.5,
+              ),
             ),
             const SizedBox(height: 16),
-            if (showSettings)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: ElevatedButton.icon(
-                  onPressed: onOpenSettings,
-                  icon: const Icon(Icons.settings, size: 18),
-                  label: const Text('設定を開く'),
+            ElevatedButton.icon(
+              onPressed: onRequest,
+              icon: const Icon(Icons.favorite, size: 18),
+              label: const Text('許可する'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24, vertical: 12,
                 ),
               ),
-            OutlinedButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('もう一度試す'),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: onSkip,
+              child: Text(
+                'あとで',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey.shade500,
+                ),
+              ),
+            ),
+            Text(
+              'ヘルスケアの権限が有効になると\n歩数が反映されます',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.grey.shade400,
+              ),
             ),
           ],
         ),
