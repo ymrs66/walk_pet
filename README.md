@@ -1,16 +1,8 @@
 # walk_pet
 
-A new Flutter project.
+歩数連動型のペット育成習慣化アプリ（Flutter製）
 
-## Getting Started
+## Overview
 
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+walk_pet は、日々の歩数と連動してペットを育てる健康習慣サポートアプリです。  
+Flutter で開発しており、まずは TestFlight で自己運用しながら改善していく想定です。
