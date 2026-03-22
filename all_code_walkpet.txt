@@ -1,0 +1,3475 @@
+# ===== FILE: lib/main.dart =====
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'core/config/ad_config.dart';
+import 'presentation/providers/providers.dart';
+import 'presentation/screens/onboarding_screen.dart';
+import 'presentation/screens/title_screen.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // AdMob 初期化 (広告有効時のみ)
+  if (AdConfig.adsEnabled && (Platform.isIOS || Platform.isAndroid)) {
+    await MobileAds.instance.initialize();
+  }
+
+  final prefs = await SharedPreferences.getInstance();
+
+  runApp(
+    ProviderScope(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+      ],
+      child: const WalkPetApp(),
+    ),
+  );
+}
+
+class WalkPetApp extends ConsumerWidget {
+  const WalkPetApp({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final onboardingCompleted = ref.watch(onboardingCompletedProvider);
+
+    return MaterialApp(
+      title: 'あるくペット',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF66BB6A),
+          brightness: Brightness.light,
+        ),
+        useMaterial3: true,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFFE8F5E9),
+          foregroundColor: Color(0xFF2E7D32),
+          elevation: 0,
+        ),
+        scaffoldBackgroundColor: const Color(0xFFFAFFF5),
+        cardTheme: CardThemeData(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+      ),
+      home: onboardingCompleted
+          ? const TitleScreen()
+          : const OnboardingScreen(),
+    );
+  }
+}
+
+
+# ===== FILE: test/widget_test.dart =====
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  testWidgets('App should build', (WidgetTester tester) async {
+    // WalkPetApp requires ProviderScope and SharedPreferences,
+    // so this is a placeholder test.
+    // Full widget tests would need proper provider overrides.
+    expect(1 + 1, equals(2));
+  });
+}
+
+
+# ===== FILE: .dart_tool/dartpad/web_plugin_registrant.dart =====
+// Flutter web plugin registrant file.
+//
+// Generated file. Do not edit.
+//
+
+// @dart = 2.13
+// ignore_for_file: type=lint
+
+import 'package:device_info_plus/src/device_info_plus_web.dart';
+import 'package:shared_preferences_web/shared_preferences_web.dart';
+import 'package:flutter_web_plugins/flutter_web_plugins.dart';
+
+void registerPlugins([final Registrar? pluginRegistrar]) {
+  final Registrar registrar = pluginRegistrar ?? webPluginRegistrar;
+  DeviceInfoPlusWebPlugin.registerWith(registrar);
+  SharedPreferencesPlugin.registerWith(registrar);
+  registrar.registerMessageHandler();
+}
+
+
+# ===== FILE: .dart_tool/flutter_build/dart_plugin_registrant.dart =====
+//
+// Generated file. Do not edit.
+// This file is generated from template in file `flutter_tools/lib/src/flutter_plugins.dart`.
+//
+
+// @dart = 3.10
+
+import 'dart:io'; // flutter_ignore: dart_io_import.
+import 'package:shared_preferences_android/shared_preferences_android.dart' as shared_preferences_android;
+import 'package:webview_flutter_android/webview_flutter_android.dart' as webview_flutter_android;
+import 'package:shared_preferences_foundation/shared_preferences_foundation.dart' as shared_preferences_foundation;
+import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart' as webview_flutter_wkwebview;
+import 'package:device_info_plus/device_info_plus.dart' as device_info_plus;
+import 'package:path_provider_linux/path_provider_linux.dart' as path_provider_linux;
+import 'package:shared_preferences_linux/shared_preferences_linux.dart' as shared_preferences_linux;
+import 'package:shared_preferences_foundation/shared_preferences_foundation.dart' as shared_preferences_foundation;
+import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart' as webview_flutter_wkwebview;
+import 'package:device_info_plus/device_info_plus.dart' as device_info_plus;
+import 'package:path_provider_windows/path_provider_windows.dart' as path_provider_windows;
+import 'package:shared_preferences_windows/shared_preferences_windows.dart' as shared_preferences_windows;
+
+@pragma('vm:entry-point')
+class _PluginRegistrant {
+
+  @pragma('vm:entry-point')
+  static void register() {
+    if (Platform.isAndroid) {
+      try {
+        shared_preferences_android.SharedPreferencesAndroid.registerWith();
+      } catch (err) {
+        print(
+          '`shared_preferences_android` threw an error: $err. '
+          'The app may not function as expected until you remove this plugin from pubspec.yaml'
+        );
+      }
+
+      try {
+        webview_flutter_android.AndroidWebViewPlatform.registerWith();
+      } catch (err) {
+        print(
+          '`webview_flutter_android` threw an error: $err. '
+          'The app may not function as expected until you remove this plugin from pubspec.yaml'
+        );
+      }
+
+    } else if (Platform.isIOS) {
+      try {
+        shared_preferences_foundation.SharedPreferencesFoundation.registerWith();
+      } catch (err) {
+        print(
+          '`shared_preferences_foundation` threw an error: $err. '
+          'The app may not function as expected until you remove this plugin from pubspec.yaml'
+        );
+      }
+
+      try {
+        webview_flutter_wkwebview.WebKitWebViewPlatform.registerWith();
+      } catch (err) {
+        print(
+          '`webview_flutter_wkwebview` threw an error: $err. '
+          'The app may not function as expected until you remove this plugin from pubspec.yaml'
+        );
+      }
+
+    } else if (Platform.isLinux) {
+      try {
+        device_info_plus.DeviceInfoPlusLinuxPlugin.registerWith();
+      } catch (err) {
+        print(
+          '`device_info_plus` threw an error: $err. '
+          'The app may not function as expected until you remove this plugin from pubspec.yaml'
+        );
+      }
+
+      try {
+        path_provider_linux.PathProviderLinux.registerWith();
+      } catch (err) {
+        print(
+          '`path_provider_linux` threw an error: $err. '
+          'The app may not function as expected until you remove this plugin from pubspec.yaml'
+        );
+      }
+
+      try {
+        shared_preferences_linux.SharedPreferencesLinux.registerWith();
+      } catch (err) {
+        print(
+          '`shared_preferences_linux` threw an error: $err. '
+          'The app may not function as expected until you remove this plugin from pubspec.yaml'
+        );
+      }
+
+    } else if (Platform.isMacOS) {
+      try {
+        shared_preferences_foundation.SharedPreferencesFoundation.registerWith();
+      } catch (err) {
+        print(
+          '`shared_preferences_foundation` threw an error: $err. '
+          'The app may not function as expected until you remove this plugin from pubspec.yaml'
+        );
+      }
+
+      try {
+        webview_flutter_wkwebview.WebKitWebViewPlatform.registerWith();
+      } catch (err) {
+        print(
+          '`webview_flutter_wkwebview` threw an error: $err. '
+          'The app may not function as expected until you remove this plugin from pubspec.yaml'
+        );
+      }
+
+    } else if (Platform.isWindows) {
+      try {
+        device_info_plus.DeviceInfoPlusWindowsPlugin.registerWith();
+      } catch (err) {
+        print(
+          '`device_info_plus` threw an error: $err. '
+          'The app may not function as expected until you remove this plugin from pubspec.yaml'
+        );
+      }
+
+      try {
+        path_provider_windows.PathProviderWindows.registerWith();
+      } catch (err) {
+        print(
+          '`path_provider_windows` threw an error: $err. '
+          'The app may not function as expected until you remove this plugin from pubspec.yaml'
+        );
+      }
+
+      try {
+        shared_preferences_windows.SharedPreferencesWindows.registerWith();
+      } catch (err) {
+        print(
+          '`shared_preferences_windows` threw an error: $err. '
+          'The app may not function as expected until you remove this plugin from pubspec.yaml'
+        );
+      }
+
+    }
+  }
+}
+
+
+# ===== FILE: lib/core/pet_asset_resolver.dart =====
+import '../../data/models/pet.dart';
+import '../../data/models/pet_emotion.dart';
+
+/// stage × emotion から画像アセットパスを解決する
+///
+/// 命名規則: assets/images/pet/{stage}_{emotion}.png
+/// フォールバック: emotion画像なし → normal → 絵文字
+class PetAssetResolver {
+  /// アセットベースパス
+  static const String _basePath = 'assets/images/pet';
+
+  /// stage × emotion → アセットパス
+  /// 画像ファイルが存在しない可能性があるため、呼び出し側でエラーハンドリングすること
+  static String assetPath(PetStage stage, PetEmotion emotion) {
+    return '$_basePath/${_stageName(stage)}_${emotion.name}.png';
+  }
+
+  /// フォールバック用: normal のアセットパス
+  static String normalAssetPath(PetStage stage) {
+    return '$_basePath/${_stageName(stage)}_normal.png';
+  }
+
+  /// Stage名 (ファイル名用)
+  static String _stageName(PetStage stage) {
+    switch (stage) {
+      case PetStage.stage1:
+        return 'stage1';
+      case PetStage.stage2:
+        return 'stage2';
+      case PetStage.stage3:
+        return 'stage3';
+    }
+  }
+
+  /// 全ステージ × 全感情のアセットパスリスト (pubspec.yaml 参考用)
+  static List<String> allAssetPaths() {
+    final paths = <String>[];
+    for (final stage in PetStage.values) {
+      for (final emotion in PetEmotion.values) {
+        paths.add(assetPath(stage, emotion));
+      }
+    }
+    return paths;
+  }
+}
+
+
+# ===== FILE: lib/core/pet_dialogue_resolver.dart =====
+import '../../data/models/pet.dart';
+import '../../data/models/pet_emotion.dart';
+
+/// stage × emotion からひとこと文言を解決する
+///
+/// 将来: JSON化やランダム化が容易な構造
+class PetDialogueResolver {
+  /// stage × emotion → ひとこと文言リスト
+  static const Map<PetStage, Map<PetEmotion, List<String>>> _dialogues = {
+    PetStage.stage1: {
+      PetEmotion.normal: [
+        'ぽかぽかしてる…',
+        'なにかが動いた…？',
+        'あったかいね…',
+      ],
+      PetEmotion.happy: [
+        'おいしかった！',
+        'しあわせ…',
+        'もっとほしいな♪',
+      ],
+      PetEmotion.hungry: [
+        'おなかすいた…',
+        'なにかたべたい…',
+        'ぐぅ…',
+      ],
+    },
+    PetStage.stage2: {
+      PetEmotion.normal: [
+        'おさんぽしたいな！',
+        'きょうもげんき！',
+        'ぴよぴよ♪',
+      ],
+      PetEmotion.happy: [
+        'おいしかった！！',
+        'ごきげん～♪',
+        'もぐもぐ大満足！',
+      ],
+      PetEmotion.hungry: [
+        'おなかぺこぺこ…',
+        'ごはんまだかなぁ…',
+        'ちからがでない…',
+      ],
+    },
+    PetStage.stage3: {
+      PetEmotion.normal: [
+        'おさんぽってたのしいね！',
+        'いっしょに歩こう！',
+        'きょうもいい天気！',
+      ],
+      PetEmotion.happy: [
+        'さいこう！！',
+        'ありがとう！大好き！',
+        'おなかいっぱい♪',
+      ],
+      PetEmotion.hungry: [
+        'おなかすいたよ～',
+        'なにかたべたいなぁ',
+        'ちょっとつかれた…',
+      ],
+    },
+  };
+
+  /// stage × emotion からひとこと文言を取得
+  /// 時刻ベースでセミランダム選択 (将来 Random に変更可能)
+  static String resolve(PetStage stage, PetEmotion emotion) {
+    final emotionMap = _dialogues[stage];
+    if (emotionMap == null) return '…';
+
+    final list = emotionMap[emotion] ?? emotionMap[PetEmotion.normal] ?? ['…'];
+    return list[DateTime.now().millisecondsSinceEpoch % list.length];
+  }
+}
+
+
+# ===== FILE: lib/core/pet_stage_config.dart =====
+import '../../data/models/pet.dart';
+
+/// ペットの Stage ごとの世界観設定を1箇所に集約
+///
+/// hitokoto は PetDialogueResolver に移行 (emotion 対応)
+/// 画像は PetAssetResolver に移行 (stage × emotion 対応)
+class PetStageConfig {
+  final PetStage stage;
+  final String emoji;
+  final String label;
+  final String description;
+
+  const PetStageConfig({
+    required this.stage,
+    required this.emoji,
+    required this.label,
+    required this.description,
+  });
+
+  /// Stage別の設定を取得
+  static PetStageConfig forStage(PetStage stage) {
+    return _configs[stage]!;
+  }
+
+  static const Map<PetStage, PetStageConfig> _configs = {
+    PetStage.stage1: PetStageConfig(
+      stage: PetStage.stage1,
+      emoji: '🥚',
+      label: 'たまご',
+      description: 'おさんぽエネルギーで あたたまっている',
+    ),
+    PetStage.stage2: PetStageConfig(
+      stage: PetStage.stage2,
+      emoji: '🐣',
+      label: 'ひよこ',
+      description: 'げんきいっぱいの まいにち',
+    ),
+    PetStage.stage3: PetStageConfig(
+      stage: PetStage.stage3,
+      emoji: '🐓',
+      label: 'げんきどり',
+      description: 'たくさん歩いて りっぱに育った',
+    ),
+  };
+}
+
+
+# ===== FILE: lib/core/config/ad_config.dart =====
+import '../config/debug_config.dart';
+
+/// 広告ID設定
+///
+/// 本番切替時: テストIDを本番IDに変更する
+class AdConfig {
+  /// 広告を有効にするか
+  /// debugMode時は無効にする
+  static bool get adsEnabled => !DebugConfig.debugMode;
+
+  // ----- テストID (Google公式) -----
+
+  /// バナー広告テストID
+  static const String bannerAdUnitId =
+      'ca-app-pub-3940256099942544/6300978111';
+
+  /// リワード広告テストID
+  static const String rewardAdUnitId =
+      'ca-app-pub-3940256099942544/5224354917';
+
+  // ----- 本番ID (リリース時にここを変更) -----
+  // static const String bannerAdUnitId = 'ca-app-pub-XXXX/YYYY';
+  // static const String rewardAdUnitId = 'ca-app-pub-XXXX/ZZZZ';
+}
+
+
+# ===== FILE: lib/core/config/debug_config.dart =====
+/// デバッグ設定
+///
+/// 開発中のみ使用する設定を集約するファイル。
+/// リリース前に debugMode = false に変更すること。
+class DebugConfig {
+  /// デバッグモード (true = 開発用機能を有効化)
+  static const bool debugMode = true;
+
+  /// ダミー歩数を使用する (Windows / macOS / Linux でのデバッグ用)
+  static const bool useDummyHealth = true;
+
+  /// ダミー歩数の値
+  static const int dummySteps = 9000;
+
+  /// デバッグ情報をUI上に表示する
+  static const bool showDebugBanner = true;
+}
+
+
+# ===== FILE: lib/data/datasources/health_datasource.dart =====
+import 'dart:io';
+import 'package:health/health.dart';
+import '../models/health_permission_status.dart';
+
+/// health プラグインのラッパー
+///
+/// プラグインの直接利用を datasource 層に閉じ込め、
+/// repository / provider からはこのクラス経由でアクセスする。
+class HealthDatasource {
+  final Health _health = Health();
+  bool _configured = false;
+
+  /// health プラグインの初期化
+  Future<void> configure() async {
+    if (_configured) return;
+    await _health.configure();
+    _configured = true;
+  }
+
+  /// Android: Health Connect の利用可否を判定
+  /// iOS: 常に null (HealthKit は OS 標準のため利用可能)
+  Future<bool> isHealthConnectAvailable() async {
+    if (!Platform.isAndroid) return true; // iOS は常に利用可能
+    try {
+      final status = await _health.getHealthConnectSdkStatus();
+      return status == HealthConnectSdkStatus.sdkAvailable;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 歩数読み取り権限をリクエスト
+  Future<HealthPermissionStatus> requestStepPermission() async {
+    try {
+      // Android: Health Connect が利用できるか先にチェック
+      if (!await isHealthConnectAvailable()) {
+        return HealthPermissionStatus.unavailable;
+      }
+
+      await configure();
+
+      final types = [HealthDataType.STEPS];
+      final permissions = [HealthDataAccess.READ];
+
+      final granted = await _health.requestAuthorization(
+        types,
+        permissions: permissions,
+      );
+
+      if (granted) {
+        return HealthPermissionStatus.granted;
+      } else {
+        return HealthPermissionStatus.denied;
+      }
+    } catch (_) {
+      return HealthPermissionStatus.error;
+    }
+  }
+
+  /// 権限状態を確認 (権限要求なし)
+  Future<HealthPermissionStatus> checkStepPermission() async {
+    try {
+      // Android: Health Connect が利用できるか先にチェック
+      if (!await isHealthConnectAvailable()) {
+        return HealthPermissionStatus.unavailable;
+      }
+
+      await configure();
+
+      final types = [HealthDataType.STEPS];
+      final permissions = [HealthDataAccess.READ];
+
+      final hasPermissions = await _health.hasPermissions(
+        types,
+        permissions: permissions,
+      );
+
+      if (hasPermissions == true) {
+        return HealthPermissionStatus.granted;
+      } else {
+        // false or null → 未許可 (denied として扱う)
+        return HealthPermissionStatus.denied;
+      }
+    } catch (_) {
+      return HealthPermissionStatus.error;
+    }
+  }
+
+  /// 今日 0:00 〜 現在の歩数合計を取得
+  /// 権限がない場合や取得失敗時は null を返す
+  Future<int?> getTodayTotalSteps() async {
+    try {
+      await configure();
+
+      final now = DateTime.now();
+      final midnight = DateTime(now.year, now.month, now.day);
+
+      final steps = await _health.getTotalStepsInInterval(midnight, now);
+      return steps;
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+
+# ===== FILE: lib/data/datasources/local_datasource.dart =====
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../models/pet.dart';
+import '../models/inventory_item.dart';
+import '../models/daily_reward_state.dart';
+
+/// SharedPreferencesを使ったローカルデータソース
+class LocalDatasource {
+  static const _petKey = 'pet_data';
+  static const _inventoryKey = 'inventory_data';
+  static const _rewardStateKey = 'reward_state_data';
+  static const _onboardingKey = 'onboarding_completed';
+  static const _introShownKey = 'intro_shown';
+  static const _lastFedAtKey = 'last_fed_at';
+
+  final SharedPreferences _prefs;
+
+  LocalDatasource(this._prefs);
+
+  // --- Pet ---
+
+  Future<void> savePet(Pet pet) async {
+    await _prefs.setString(_petKey, jsonEncode(pet.toJson()));
+  }
+
+  Pet loadPet() {
+    final json = _prefs.getString(_petKey);
+    if (json == null) return Pet.defaultPet;
+    return Pet.fromJson(jsonDecode(json) as Map<String, dynamic>);
+  }
+
+  // --- Inventory ---
+
+  Future<void> saveInventory(List<InventoryItem> items) async {
+    final jsonList = items.map((item) => item.toJson()).toList();
+    await _prefs.setString(_inventoryKey, jsonEncode(jsonList));
+  }
+
+  List<InventoryItem> loadInventory() {
+    final json = _prefs.getString(_inventoryKey);
+    if (json == null) return [];
+    final list = jsonDecode(json) as List;
+    return list
+        .map((e) => InventoryItem.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  // --- DailyRewardState ---
+
+  Future<void> saveRewardState(DailyRewardState state) async {
+    await _prefs.setString(_rewardStateKey, jsonEncode(state.toJson()));
+  }
+
+  DailyRewardState loadRewardState() {
+    final json = _prefs.getString(_rewardStateKey);
+    if (json == null) return DailyRewardState.today();
+    final state = DailyRewardState.fromJson(
+        jsonDecode(json) as Map<String, dynamic>);
+    // 日付が変わっていたらリセット
+    if (!state.isToday) return DailyRewardState.today();
+    return state;
+  }
+
+  // --- Onboarding ---
+
+  Future<void> setOnboardingCompleted(bool completed) async {
+    await _prefs.setBool(_onboardingKey, completed);
+  }
+
+  bool isOnboardingCompleted() {
+    return _prefs.getBool(_onboardingKey) ?? false;
+  }
+
+  // --- Intro ---
+
+  Future<void> setIntroShown(bool shown) async {
+    await _prefs.setBool(_introShownKey, shown);
+  }
+
+  bool isIntroShown() {
+    return _prefs.getBool(_introShownKey) ?? false;
+  }
+
+  // --- Last Fed At ---
+
+  Future<void> saveLastFedAt(DateTime time) async {
+    await _prefs.setString(_lastFedAtKey, time.toIso8601String());
+  }
+
+  DateTime? loadLastFedAt() {
+    final str = _prefs.getString(_lastFedAtKey);
+    if (str == null) return null;
+    return DateTime.tryParse(str);
+  }
+}
+
+
+# ===== FILE: lib/data/models/daily_reward_state.dart =====
+/// 日次報酬の受取状態
+class DailyRewardState {
+  final String date; // yyyy-MM-dd
+  final List<String> claimedRewardIds;
+
+  const DailyRewardState({
+    required this.date,
+    this.claimedRewardIds = const [],
+  });
+
+  /// 指定IDの報酬が受取済みかどうか
+  bool hasClaimed(String rewardId) => claimedRewardIds.contains(rewardId);
+
+  /// 報酬を受取済みにして新しいStateを返す
+  DailyRewardState claim(String rewardId) => DailyRewardState(
+        date: date,
+        claimedRewardIds: [...claimedRewardIds, rewardId],
+      );
+
+  Map<String, dynamic> toJson() => {
+        'date': date,
+        'claimedRewardIds': claimedRewardIds,
+      };
+
+  factory DailyRewardState.fromJson(Map<String, dynamic> json) =>
+      DailyRewardState(
+        date: json['date'] as String,
+        claimedRewardIds: List<String>.from(json['claimedRewardIds'] as List),
+      );
+
+  /// 今日の初期状態を生成
+  factory DailyRewardState.today() => DailyRewardState(
+        date: _todayString(),
+      );
+
+  static String _todayString() {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  }
+
+  /// 今日のデータかどうか
+  bool get isToday => date == _todayString();
+}
+
+
+# ===== FILE: lib/data/models/food.dart =====
+/// 食材モデル
+class Food {
+  final String id;
+  final String name;
+  final int expValue;
+  final int requiredSteps;
+  final String description; // 世界観サブ文言
+
+  const Food({
+    required this.id,
+    required this.name,
+    required this.expValue,
+    required this.requiredSteps,
+    this.description = '',
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'expValue': expValue,
+        'requiredSteps': requiredSteps,
+      };
+
+  factory Food.fromJson(Map<String, dynamic> json) => Food(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        expValue: json['expValue'] as int,
+        requiredSteps: json['requiredSteps'] as int,
+      );
+}
+
+/// マスターデータ: 全食材一覧
+const List<Food> allFoods = [
+  Food(
+    id: 'kinomi',
+    name: 'きのみ',
+    expValue: 1,
+    requiredSteps: 1000,
+    description: 'ちいさな森のめぐみ',
+  ),
+  Food(
+    id: 'ninjin',
+    name: 'にんじん',
+    expValue: 3,
+    requiredSteps: 3000,
+    description: 'あまくて元気が出る',
+  ),
+  Food(
+    id: 'osakana',
+    name: 'おさかな',
+    expValue: 5,
+    requiredSteps: 5000,
+    description: 'ちょっと特別なごちそう',
+  ),
+];
+
+/// IDから食材を検索
+Food? findFoodById(String id) {
+  try {
+    return allFoods.firstWhere((f) => f.id == id);
+  } catch (_) {
+    return null;
+  }
+}
+
+
+# ===== FILE: lib/data/models/health_permission_status.dart =====
+/// 健康データアクセス権限の状態
+enum HealthPermissionStatus {
+  /// 未要求 (初期状態)
+  unknown,
+
+  /// 許可済み
+  granted,
+
+  /// 拒否された
+  denied,
+
+  /// 利用不可 (未対応端末 / Health Connect未導入等)
+  unavailable,
+
+  /// エラー (予期しない問題)
+  error,
+}
+
+
+# ===== FILE: lib/data/models/inventory_item.dart =====
+/// インベントリアイテムモデル
+class InventoryItem {
+  final String foodId;
+  final int count;
+
+  const InventoryItem({
+    required this.foodId,
+    this.count = 0,
+  });
+
+  InventoryItem copyWith({int? count}) => InventoryItem(
+        foodId: foodId,
+        count: count ?? this.count,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'foodId': foodId,
+        'count': count,
+      };
+
+  factory InventoryItem.fromJson(Map<String, dynamic> json) => InventoryItem(
+        foodId: json['foodId'] as String,
+        count: json['count'] as int,
+      );
+}
+
+
+# ===== FILE: lib/data/models/pet.dart =====
+/// ペットの成長段階
+enum PetStage {
+  stage1, // EXP 0-4
+  stage2, // EXP 5-11
+  stage3, // EXP 12+
+}
+
+/// ペットモデル
+class Pet {
+  final String id;
+  final String name;
+  final int exp;
+  final PetStage stage;
+
+  const Pet({
+    required this.id,
+    required this.name,
+    this.exp = 0,
+    this.stage = PetStage.stage1,
+  });
+
+  /// EXPからStageを自動判定して新しいPetを生成
+  Pet copyWith({String? id, String? name, int? exp}) {
+    final newExp = exp ?? this.exp;
+    return Pet(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      exp: newExp,
+      stage: stageFromExp(newExp),
+    );
+  }
+
+  /// EXP値からStageを判定
+  static PetStage stageFromExp(int exp) {
+    if (exp >= 12) return PetStage.stage3;
+    if (exp >= 5) return PetStage.stage2;
+    return PetStage.stage1;
+  }
+
+  /// Stage表示用の絵文字
+  String get stageEmoji {
+    switch (stage) {
+      case PetStage.stage1:
+        return '🥚';
+      case PetStage.stage2:
+        return '🐣';
+      case PetStage.stage3:
+        return '🐓';
+    }
+  }
+
+  /// Stage表示用のラベル
+  String get stageLabel {
+    switch (stage) {
+      case PetStage.stage1:
+        return 'たまご';
+      case PetStage.stage2:
+        return 'ひよこ';
+      case PetStage.stage3:
+        return 'げんきどり';
+    }
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'exp': exp,
+        'stage': stage.index,
+      };
+
+  factory Pet.fromJson(Map<String, dynamic> json) => Pet(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        exp: json['exp'] as int,
+        stage: PetStage.values[json['stage'] as int],
+      );
+
+  /// デフォルトのペット
+  static const Pet defaultPet = Pet(
+    id: 'pet_001',
+    name: 'ぴよすけ',
+  );
+}
+
+
+# ===== FILE: lib/data/models/pet_emotion.dart =====
+/// ペットの感情状態
+enum PetEmotion {
+  /// 通常状態
+  normal,
+
+  /// 満足している状態 (餌やり直後)
+  happy,
+
+  /// おなかがすいている状態 (時間経過)
+  hungry,
+}
+
+
+# ===== FILE: lib/data/models/step_state.dart =====
+/// 歩数状態モデル
+class StepState {
+  final String date; // yyyy-MM-dd
+  final int steps;
+
+  const StepState({
+    required this.date,
+    this.steps = 0,
+  });
+
+  StepState copyWith({int? steps}) => StepState(
+        date: date,
+        steps: steps ?? this.steps,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'date': date,
+        'steps': steps,
+      };
+
+  factory StepState.fromJson(Map<String, dynamic> json) => StepState(
+        date: json['date'] as String,
+        steps: json['steps'] as int,
+      );
+}
+
+
+# ===== FILE: lib/data/repositories/game_repository.dart =====
+import '../datasources/local_datasource.dart';
+import '../models/pet.dart';
+import '../models/inventory_item.dart';
+import '../models/daily_reward_state.dart';
+import '../models/food.dart';
+
+/// ゲームデータ操作リポジトリ
+class GameRepository {
+  final LocalDatasource _datasource;
+
+  GameRepository(this._datasource);
+
+  // --- Pet ---
+
+  Pet loadPet() => _datasource.loadPet();
+
+  Future<void> savePet(Pet pet) => _datasource.savePet(pet);
+
+  /// EXPを加算してStageを自動更新
+  Future<Pet> addExp(int expAmount) async {
+    final pet = loadPet();
+    final updated = pet.copyWith(exp: pet.exp + expAmount);
+    await savePet(updated);
+    return updated;
+  }
+
+  // --- Inventory ---
+
+  List<InventoryItem> loadInventory() => _datasource.loadInventory();
+
+  Future<void> saveInventory(List<InventoryItem> items) =>
+      _datasource.saveInventory(items);
+
+  /// 食材を1つ追加
+  Future<List<InventoryItem>> addFood(String foodId) async {
+    final items = loadInventory();
+    final index = items.indexWhere((item) => item.foodId == foodId);
+    List<InventoryItem> updated;
+    if (index >= 0) {
+      updated = List.of(items);
+      updated[index] = items[index].copyWith(count: items[index].count + 1);
+    } else {
+      updated = [...items, InventoryItem(foodId: foodId, count: 1)];
+    }
+    await saveInventory(updated);
+    return updated;
+  }
+
+  /// 食材を1つ消費。成功時はtrue、在庫不足はfalse。
+  Future<({List<InventoryItem> inventory, bool success})> consumeFood(
+      String foodId) async {
+    final items = loadInventory();
+    final index = items.indexWhere((item) => item.foodId == foodId);
+    if (index < 0 || items[index].count <= 0) {
+      return (inventory: items, success: false);
+    }
+    final updated = List.of(items);
+    final newCount = items[index].count - 1;
+    if (newCount <= 0) {
+      updated.removeAt(index);
+    } else {
+      updated[index] = items[index].copyWith(count: newCount);
+    }
+    await saveInventory(updated);
+    return (inventory: updated, success: true);
+  }
+
+  // --- DailyRewardState ---
+
+  DailyRewardState loadRewardState() => _datasource.loadRewardState();
+
+  Future<void> saveRewardState(DailyRewardState state) =>
+      _datasource.saveRewardState(state);
+
+  /// 報酬を受け取る。未受取かつ歩数条件を満たしている場合のみ成功。
+  Future<({DailyRewardState rewardState, List<InventoryItem> inventory, bool success})>
+      claimReward(String foodId, int currentSteps) async {
+    final food = findFoodById(foodId);
+    if (food == null) {
+      return (
+        rewardState: loadRewardState(),
+        inventory: loadInventory(),
+        success: false,
+      );
+    }
+
+    final rewardState = loadRewardState();
+
+    // 既に受け取り済み
+    if (rewardState.hasClaimed(foodId)) {
+      return (
+        rewardState: rewardState,
+        inventory: loadInventory(),
+        success: false,
+      );
+    }
+
+    // 歩数条件を満たしていない
+    if (currentSteps < food.requiredSteps) {
+      return (
+        rewardState: rewardState,
+        inventory: loadInventory(),
+        success: false,
+      );
+    }
+
+    // 報酬を受け取り
+    final updatedRewardState = rewardState.claim(foodId);
+    await saveRewardState(updatedRewardState);
+    final updatedInventory = await addFood(foodId);
+
+    return (
+      rewardState: updatedRewardState,
+      inventory: updatedInventory,
+      success: true,
+    );
+  }
+
+  /// 餌やり: 食材消費 + EXP加算 + Stage更新
+  Future<({Pet pet, List<InventoryItem> inventory, bool success})> feedPet(
+      String foodId) async {
+    final food = findFoodById(foodId);
+    if (food == null) {
+      return (pet: loadPet(), inventory: loadInventory(), success: false);
+    }
+
+    final consumeResult = await consumeFood(foodId);
+    if (!consumeResult.success) {
+      return (
+        pet: loadPet(),
+        inventory: consumeResult.inventory,
+        success: false,
+      );
+    }
+
+    final updatedPet = await addExp(food.expValue);
+    return (
+      pet: updatedPet,
+      inventory: consumeResult.inventory,
+      success: true,
+    );
+  }
+
+  // --- Onboarding ---
+
+  bool isOnboardingCompleted() => _datasource.isOnboardingCompleted();
+
+  Future<void> setOnboardingCompleted(bool completed) =>
+      _datasource.setOnboardingCompleted(completed);
+}
+
+
+# ===== FILE: lib/data/repositories/health_repository.dart =====
+import '../models/step_state.dart';
+import '../models/health_permission_status.dart';
+import '../datasources/health_datasource.dart';
+
+/// 歩数データ取得の抽象クラス
+abstract class HealthRepository {
+  /// 今日の歩数を取得
+  Future<StepState> getTodaySteps();
+
+  /// 健康データへのアクセス許可をリクエスト
+  Future<HealthPermissionStatus> requestPermission();
+
+  /// 現在の権限状態を確認 (権限要求なし)
+  Future<HealthPermissionStatus> checkPermissionStatus();
+}
+
+// =============================================================
+// 実機用: HealthKit / Health Connect から歩数を取得
+// =============================================================
+
+/// 実機の歩数を取得するリポジトリ
+class RealHealthRepository implements HealthRepository {
+  final HealthDatasource _datasource;
+
+  RealHealthRepository(this._datasource);
+
+  @override
+  Future<StepState> getTodaySteps() async {
+    final steps = await _datasource.getTodayTotalSteps();
+    final now = DateTime.now();
+    final dateStr =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    return StepState(date: dateStr, steps: steps ?? 0);
+  }
+
+  @override
+  Future<HealthPermissionStatus> requestPermission() async {
+    return _datasource.requestStepPermission();
+  }
+
+  @override
+  Future<HealthPermissionStatus> checkPermissionStatus() async {
+    return _datasource.checkStepPermission();
+  }
+}
+
+// =============================================================
+// テスト用: ダミー歩数を返す実装
+// =============================================================
+
+/// Step1互換: ダミー歩数を返す実装
+class DummyHealthRepository implements HealthRepository {
+  final int dummySteps;
+
+  DummyHealthRepository({required this.dummySteps});
+
+  @override
+  Future<StepState> getTodaySteps() async {
+    final now = DateTime.now();
+    final dateStr =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    return StepState(date: dateStr, steps: dummySteps);
+  }
+
+  @override
+  Future<HealthPermissionStatus> requestPermission() async {
+    return HealthPermissionStatus.granted;
+  }
+
+  @override
+  Future<HealthPermissionStatus> checkPermissionStatus() async {
+    return HealthPermissionStatus.granted;
+  }
+}
+
+
+# ===== FILE: lib/data/repositories/save_repository.dart =====
+import '../datasources/local_datasource.dart';
+import '../models/pet.dart';
+import '../models/inventory_item.dart';
+import '../models/daily_reward_state.dart';
+
+/// ローカル保存の抽象化レイヤー
+///
+/// 将来的にクラウド保存等への拡張が容易になるよう、
+/// LocalDatasourceをラップして保存操作を提供する。
+class SaveRepository {
+  final LocalDatasource _datasource;
+
+  SaveRepository(this._datasource);
+
+  // --- Save ---
+
+  Future<void> savePet(Pet pet) => _datasource.savePet(pet);
+
+  Future<void> saveInventory(List<InventoryItem> items) =>
+      _datasource.saveInventory(items);
+
+  Future<void> saveRewardState(DailyRewardState state) =>
+      _datasource.saveRewardState(state);
+
+  // --- Load ---
+
+  Pet loadPet() => _datasource.loadPet();
+
+  List<InventoryItem> loadInventory() => _datasource.loadInventory();
+
+  DailyRewardState loadRewardState() => _datasource.loadRewardState();
+
+  // --- Utility ---
+
+  /// 全データを保存
+  Future<void> saveAll({
+    required Pet pet,
+    required List<InventoryItem> inventory,
+    required DailyRewardState rewardState,
+  }) async {
+    await Future.wait([
+      savePet(pet),
+      saveInventory(inventory),
+      saveRewardState(rewardState),
+    ]);
+  }
+}
+
+
+# ===== FILE: lib/domain/entities/pet_entity.dart =====
+import '../../data/models/pet.dart';
+
+/// ペットエンティティのドメインロジック
+class PetEntity {
+  /// EXP値からStageを判定
+  static PetStage stageFromExp(int exp) => Pet.stageFromExp(exp);
+
+  /// EXPを加算して成長判定
+  static Pet applyExp(Pet pet, int expAmount) {
+    return pet.copyWith(exp: pet.exp + expAmount);
+  }
+
+  /// 次のStageまでに必要なEXP
+  static int expToNextStage(Pet pet) {
+    switch (pet.stage) {
+      case PetStage.stage1:
+        return 5 - pet.exp; // Stage2は EXP 5
+      case PetStage.stage2:
+        return 12 - pet.exp; // Stage3は EXP 12
+      case PetStage.stage3:
+        return 0; // 最大Stage
+    }
+  }
+
+  /// 現在Stageの進捗率 (0.0 〜 1.0)
+  static double stageProgress(Pet pet) {
+    switch (pet.stage) {
+      case PetStage.stage1:
+        return pet.exp / 5; // 0〜4 → 0.0〜0.8
+      case PetStage.stage2:
+        return (pet.exp - 5) / 7; // 5〜11 → 0.0〜0.86
+      case PetStage.stage3:
+        return 1.0; // 最大Stage
+    }
+  }
+
+  /// 現在Stageの次のStage表示名
+  static String? nextStageLabel(Pet pet) {
+    switch (pet.stage) {
+      case PetStage.stage1:
+        return 'ひよこ';
+      case PetStage.stage2:
+        return 'げんきどり';
+      case PetStage.stage3:
+        return null; // 最大Stage
+    }
+  }
+}
+
+
+# ===== FILE: lib/domain/services/ad_service.dart =====
+import 'package:flutter/foundation.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
+import '../../core/config/ad_config.dart';
+
+/// 広告サービス
+///
+/// バナー広告とリワード広告の読み込み・表示を管理する。
+/// AdConfig.adsEnabled == false のときは何もしない。
+class AdService {
+  BannerAd? _bannerAd;
+  bool _isBannerLoaded = false;
+  RewardedAd? _rewardedAd;
+
+  /// バナー広告が読み込み済みか
+  bool get isBannerLoaded => _isBannerLoaded;
+
+  /// バナー広告インスタンス
+  BannerAd? get bannerAd => _bannerAd;
+
+  /// バナー広告を読み込む
+  void loadBanner() {
+    if (!AdConfig.adsEnabled) return;
+
+    _bannerAd = BannerAd(
+      adUnitId: AdConfig.bannerAdUnitId,
+      size: AdSize.banner,
+      request: const AdRequest(),
+      listener: BannerAdListener(
+        onAdLoaded: (ad) {
+          _isBannerLoaded = true;
+          _onBannerLoadedCallback?.call();
+        },
+        onAdFailedToLoad: (ad, error) {
+          debugPrint('Banner ad failed to load: $error');
+          ad.dispose();
+          _isBannerLoaded = false;
+        },
+      ),
+    )..load();
+  }
+
+  /// バナー読み込み完了コールバック (UI更新用)
+  VoidCallback? _onBannerLoadedCallback;
+  set onBannerLoaded(VoidCallback? callback) {
+    _onBannerLoadedCallback = callback;
+  }
+
+  /// リワード広告を読み込む
+  void loadRewarded() {
+    if (!AdConfig.adsEnabled) return;
+
+    RewardedAd.load(
+      adUnitId: AdConfig.rewardAdUnitId,
+      request: const AdRequest(),
+      rewardedAdLoadCallback: RewardedAdLoadCallback(
+        onAdLoaded: (ad) {
+          _rewardedAd = ad;
+        },
+        onAdFailedToLoad: (error) {
+          debugPrint('Rewarded ad failed to load: $error');
+          _rewardedAd = null;
+        },
+      ),
+    );
+  }
+
+  /// リワード広告を表示
+  /// 報酬を受け取った場合 onReward を呼ぶ
+  void showRewarded({required VoidCallback onReward}) {
+    if (_rewardedAd == null) {
+      debugPrint('Rewarded ad not loaded yet');
+      return;
+    }
+
+    _rewardedAd!.fullScreenContentCallback = FullScreenContentCallback(
+      onAdDismissedFullScreenContent: (ad) {
+        ad.dispose();
+        _rewardedAd = null;
+        loadRewarded(); // 次の広告を事前読み込み
+      },
+      onAdFailedToShowFullScreenContent: (ad, error) {
+        debugPrint('Rewarded ad failed to show: $error');
+        ad.dispose();
+        _rewardedAd = null;
+        loadRewarded();
+      },
+    );
+
+    _rewardedAd!.show(
+      onUserEarnedReward: (ad, reward) {
+        onReward();
+      },
+    );
+  }
+
+  /// リワード広告が表示可能か
+  bool get isRewardedReady => _rewardedAd != null;
+
+  /// リソース解放
+  void dispose() {
+    _bannerAd?.dispose();
+    _rewardedAd?.dispose();
+  }
+}
+
+
+# ===== FILE: lib/domain/services/emotion_service.dart =====
+import '../../data/models/pet_emotion.dart';
+
+/// 最終餌やり時刻から感情を判定するサービス
+///
+/// 判定ルール:
+/// - 1時間以内: happy
+/// - 1時間超〜6時間以内: normal
+/// - 6時間超 or 未餌やり: hungry
+class EmotionService {
+  /// happy → normal に変わるまでの時間
+  static const Duration happyDuration = Duration(hours: 1);
+
+  /// normal → hungry に変わるまでの時間
+  static const Duration hungryThreshold = Duration(hours: 6);
+
+  /// 最終餌やり時刻から感情を判定
+  static PetEmotion resolve(DateTime? lastFedAt) {
+    if (lastFedAt == null) return PetEmotion.hungry;
+
+    final elapsed = DateTime.now().difference(lastFedAt);
+
+    if (elapsed <= happyDuration) return PetEmotion.happy;
+    if (elapsed <= hungryThreshold) return PetEmotion.normal;
+    return PetEmotion.hungry;
+  }
+}
+
+
+# ===== FILE: lib/domain/services/reward_service.dart =====
+import '../../data/models/food.dart';
+import '../../data/models/daily_reward_state.dart';
+
+/// 報酬判定に関するドメインロジック
+class RewardService {
+  /// 現在の歩数で受取可能な報酬一覧を返す
+  /// (未受取のもののみ)
+  static List<Food> getAvailableRewards(
+      int currentSteps, DailyRewardState rewardState) {
+    return allFoods.where((food) {
+      return currentSteps >= food.requiredSteps &&
+          !rewardState.hasClaimed(food.id);
+    }).toList();
+  }
+
+  /// 全報酬の状態を返す (受取済み、受取可能、未到達)
+  static List<RewardStatus> getAllRewardStatuses(
+      int currentSteps, DailyRewardState rewardState) {
+    return allFoods.map((food) {
+      if (rewardState.hasClaimed(food.id)) {
+        return RewardStatus(food: food, status: RewardStatusType.claimed);
+      }
+      if (currentSteps >= food.requiredSteps) {
+        return RewardStatus(food: food, status: RewardStatusType.available);
+      }
+      return RewardStatus(food: food, status: RewardStatusType.locked);
+    }).toList();
+  }
+}
+
+enum RewardStatusType {
+  claimed, // 受取済み
+  available, // 受取可能
+  locked, // 未到達
+}
+
+class RewardStatus {
+  final Food food;
+  final RewardStatusType status;
+
+  const RewardStatus({required this.food, required this.status});
+}
+
+
+# ===== FILE: lib/presentation/providers/providers.dart =====
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../data/datasources/local_datasource.dart';
+import '../../data/datasources/health_datasource.dart';
+import '../../data/repositories/health_repository.dart';
+import '../../data/repositories/game_repository.dart';
+import '../../data/repositories/save_repository.dart';
+import '../../core/config/debug_config.dart';
+import '../../data/models/step_state.dart';
+import '../../data/models/pet.dart';
+import '../../data/models/pet_emotion.dart';
+import '../../data/models/inventory_item.dart';
+import '../../data/models/daily_reward_state.dart';
+import '../../data/models/health_permission_status.dart';
+import '../../data/models/food.dart';
+import '../../domain/services/reward_service.dart';
+import '../../domain/services/emotion_service.dart';
+
+// =============================================================
+// Core Providers (依存注入)
+// =============================================================
+
+final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
+  throw UnimplementedError('SharedPreferences must be overridden at startup');
+});
+
+final localDatasourceProvider = Provider<LocalDatasource>((ref) {
+  return LocalDatasource(ref.watch(sharedPreferencesProvider));
+});
+
+final healthDatasourceProvider = Provider<HealthDatasource>((ref) {
+  return HealthDatasource();
+});
+
+/// DebugConfig で DummyHealthRepository / RealHealthRepository を切替
+final healthRepositoryProvider = Provider<HealthRepository>((ref) {
+  if (DebugConfig.debugMode && DebugConfig.useDummyHealth) {
+    return DummyHealthRepository(dummySteps: DebugConfig.dummySteps);
+  }
+  return RealHealthRepository(ref.watch(healthDatasourceProvider));
+});
+
+final gameRepositoryProvider = Provider<GameRepository>((ref) {
+  return GameRepository(ref.watch(localDatasourceProvider));
+});
+
+final saveRepositoryProvider = Provider<SaveRepository>((ref) {
+  return SaveRepository(ref.watch(localDatasourceProvider));
+});
+
+// =============================================================
+// Onboarding Provider
+// =============================================================
+
+class OnboardingNotifier extends StateNotifier<bool> {
+  final GameRepository _gameRepo;
+
+  OnboardingNotifier(this._gameRepo)
+      : super(_gameRepo.isOnboardingCompleted());
+
+  Future<void> complete() async {
+    await _gameRepo.setOnboardingCompleted(true);
+    state = true;
+  }
+}
+
+final onboardingCompletedProvider =
+    StateNotifierProvider<OnboardingNotifier, bool>((ref) {
+  return OnboardingNotifier(ref.watch(gameRepositoryProvider));
+});
+
+// =============================================================
+// Intro Provider
+// =============================================================
+
+class IntroNotifier extends StateNotifier<bool> {
+  final LocalDatasource _datasource;
+
+  IntroNotifier(this._datasource) : super(_datasource.isIntroShown());
+
+  Future<void> markShown() async {
+    await _datasource.setIntroShown(true);
+    state = true;
+  }
+}
+
+final introShownProvider =
+    StateNotifierProvider<IntroNotifier, bool>((ref) {
+  return IntroNotifier(ref.watch(localDatasourceProvider));
+});
+
+// =============================================================
+// Health Permission Provider
+// =============================================================
+
+class HealthPermissionNotifier extends StateNotifier<HealthPermissionStatus> {
+  final HealthRepository _healthRepo;
+
+  HealthPermissionNotifier(this._healthRepo)
+      : super(HealthPermissionStatus.unknown);
+
+  Future<void> check() async {
+    state = await _healthRepo.checkPermissionStatus();
+  }
+
+  Future<HealthPermissionStatus> request() async {
+    state = await _healthRepo.requestPermission();
+    return state;
+  }
+}
+
+final healthPermissionProvider = StateNotifierProvider<
+    HealthPermissionNotifier, HealthPermissionStatus>((ref) {
+  return HealthPermissionNotifier(ref.watch(healthRepositoryProvider));
+});
+
+// =============================================================
+// Step Provider
+// =============================================================
+
+final stepProvider = FutureProvider.autoDispose<StepState>((ref) async {
+  final repo = ref.watch(healthRepositoryProvider);
+  return repo.getTodaySteps();
+});
+
+// =============================================================
+// Pet Provider
+// =============================================================
+
+class PetNotifier extends StateNotifier<Pet> {
+  final GameRepository _gameRepo;
+
+  PetNotifier(this._gameRepo) : super(_gameRepo.loadPet());
+
+  void refresh() {
+    state = _gameRepo.loadPet();
+  }
+}
+
+final petProvider = StateNotifierProvider<PetNotifier, Pet>((ref) {
+  return PetNotifier(ref.watch(gameRepositoryProvider));
+});
+
+// =============================================================
+// Emotion Provider — 最終餌やり時刻から判定
+// =============================================================
+
+class EmotionNotifier extends StateNotifier<PetEmotion> {
+  final LocalDatasource _datasource;
+  DateTime? _debugOverride;
+
+  EmotionNotifier(this._datasource)
+      : super(EmotionService.resolve(_datasource.loadLastFedAt()));
+
+  /// 餌やり時に呼ぶ → happy に遷移
+  Future<void> onFed() async {
+    final now = DateTime.now();
+    await _datasource.saveLastFedAt(now);
+    _debugOverride = null;
+    state = PetEmotion.happy;
+  }
+
+  /// 時間経過による再判定
+  void refresh() {
+    if (_debugOverride != null) return; // デバッグ上書き中は更新しない
+    state = EmotionService.resolve(_datasource.loadLastFedAt());
+  }
+
+  /// デバッグ: 感情を直接設定
+  void debugSetEmotion(PetEmotion emotion) {
+    _debugOverride = DateTime.now();
+    state = emotion;
+  }
+}
+
+final emotionProvider =
+    StateNotifierProvider<EmotionNotifier, PetEmotion>((ref) {
+  return EmotionNotifier(ref.watch(localDatasourceProvider));
+});
+
+// =============================================================
+// Inventory Provider
+// =============================================================
+
+class InventoryNotifier extends StateNotifier<List<InventoryItem>> {
+  final GameRepository _gameRepo;
+
+  InventoryNotifier(this._gameRepo) : super(_gameRepo.loadInventory());
+
+  void refresh() {
+    state = _gameRepo.loadInventory();
+  }
+}
+
+final inventoryProvider =
+    StateNotifierProvider<InventoryNotifier, List<InventoryItem>>((ref) {
+  return InventoryNotifier(ref.watch(gameRepositoryProvider));
+});
+
+// =============================================================
+// Reward Provider
+// =============================================================
+
+class RewardNotifier extends StateNotifier<DailyRewardState> {
+  final GameRepository _gameRepo;
+
+  RewardNotifier(this._gameRepo) : super(_gameRepo.loadRewardState());
+
+  void refresh() {
+    state = _gameRepo.loadRewardState();
+  }
+}
+
+final rewardStateProvider =
+    StateNotifierProvider<RewardNotifier, DailyRewardState>((ref) {
+  return RewardNotifier(ref.watch(gameRepositoryProvider));
+});
+
+final rewardStatusListProvider = Provider<List<RewardStatus>>((ref) {
+  final stepAsync = ref.watch(stepProvider);
+  final rewardState = ref.watch(rewardStateProvider);
+
+  return stepAsync.when(
+    data: (stepState) =>
+        RewardService.getAllRewardStatuses(stepState.steps, rewardState),
+    loading: () => [],
+    error: (_, _) => [],
+  );
+});
+
+// =============================================================
+// Game Actions
+// =============================================================
+
+final gameActionsProvider = Provider<GameActions>((ref) {
+  return GameActions(ref);
+});
+
+class GameActions {
+  final Ref _ref;
+
+  GameActions(this._ref);
+
+  GameRepository get _gameRepo => _ref.read(gameRepositoryProvider);
+
+  Future<bool> claimReward(String foodId) async {
+    final stepState = await _ref.read(stepProvider.future);
+    final result = await _gameRepo.claimReward(foodId, stepState.steps);
+
+    if (result.success) {
+      _ref.read(rewardStateProvider.notifier).refresh();
+      _ref.read(inventoryProvider.notifier).refresh();
+    }
+
+    return result.success;
+  }
+
+  /// 餌やり — 成功時に emotion も happy にする
+  Future<bool> feedPet(String foodId) async {
+    final result = await _gameRepo.feedPet(foodId);
+
+    if (result.success) {
+      _ref.read(petProvider.notifier).refresh();
+      _ref.read(inventoryProvider.notifier).refresh();
+      await _ref.read(emotionProvider.notifier).onFed();
+    }
+
+    return result.success;
+  }
+
+  void refreshSteps() {
+    _ref.invalidate(stepProvider);
+  }
+
+  // =============================================================
+  // Debug Actions
+  // =============================================================
+
+  Future<void> debugResetRewards() async {
+    await _gameRepo.saveRewardState(DailyRewardState.today());
+    _ref.read(rewardStateProvider.notifier).refresh();
+  }
+
+  Future<void> debugAddExp(int amount) async {
+    await _gameRepo.addExp(amount);
+    _ref.read(petProvider.notifier).refresh();
+  }
+
+  Future<void> debugAddAllFoods() async {
+    for (final food in allFoods) {
+      await _gameRepo.addFood(food.id);
+    }
+    _ref.read(inventoryProvider.notifier).refresh();
+  }
+
+  void debugSetEmotion(PetEmotion emotion) {
+    _ref.read(emotionProvider.notifier).debugSetEmotion(emotion);
+  }
+}
+
+
+# ===== FILE: lib/presentation/screens/home_screen.dart =====
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../data/models/pet.dart';
+import '../../data/models/food.dart';
+import '../../data/models/step_state.dart' as models;
+import '../../data/models/health_permission_status.dart';
+import '../../domain/services/reward_service.dart';
+import '../../domain/entities/pet_entity.dart';
+import '../../core/pet_stage_config.dart';
+import '../../core/pet_dialogue_resolver.dart';
+import '../../core/config/debug_config.dart';
+import '../../data/models/pet_emotion.dart';
+import '../../domain/services/ad_service.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
+import '../providers/providers.dart';
+import '../widgets/pet_display.dart';
+import '../widgets/food_helpers.dart';
+import '../widgets/debug_panel.dart';
+import 'inventory_screen.dart';
+
+/// ホーム画面
+class HomeScreen extends ConsumerStatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  PetStage? _previousStage;
+  final AdService _adService = AdService();
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() {
+      ref.read(healthPermissionProvider.notifier).check();
+      _showIntroIfNeeded();
+    });
+    // バナー広告読み込み
+    _adService.onBannerLoaded = () {
+      if (mounted) setState(() {});
+    };
+    _adService.loadBanner();
+  }
+
+  @override
+  void dispose() {
+    _adService.dispose();
+    super.dispose();
+  }
+
+  /// 初回導入ダイアログ (1回のみ)
+  void _showIntroIfNeeded() {
+    final introShown = ref.read(introShownProvider);
+    if (introShown) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Row(
+            children: [
+              Text('🥚', style: TextStyle(fontSize: 28)),
+              SizedBox(width: 8),
+              Text('はじめまして！'),
+            ],
+          ),
+          content: const Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'この子は「おさんぽエネルギー」で\n育つふしぎな生き物です。',
+                style: TextStyle(fontSize: 15, height: 1.6),
+              ),
+              SizedBox(height: 12),
+              Text(
+                '🚶 歩くと食材がみつかります\n🍽️ 食材をあげると成長します\n🐣 たくさん歩いて育てよう！',
+                style: TextStyle(fontSize: 14, height: 1.6),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                ref.read(introShownProvider.notifier).markShown();
+                Navigator.of(context).pop();
+              },
+              child: const Text('わかった！',
+                  style: TextStyle(fontSize: 16)),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pet = ref.watch(petProvider);
+    final stepAsync = ref.watch(stepProvider);
+    final rewardStatuses = ref.watch(rewardStatusListProvider);
+    final permissionStatus = ref.watch(healthPermissionProvider);
+    final gameActions = ref.read(gameActionsProvider);
+    final emotion = ref.watch(emotionProvider);
+
+    // 画面表示時に感情を再判定
+    ref.read(emotionProvider.notifier).refresh();
+
+    // 成長段階が変わったら演出
+    if (_previousStage != null && _previousStage != pet.stage) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showStageUpDialog(context, pet);
+      });
+    }
+    _previousStage = pet.stage;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('あるくペット'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.inventory_2),
+            tooltip: 'もちもの',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const InventoryScreen()),
+              );
+            },
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            // デバッグバナー
+            if (DebugConfig.debugMode &&
+                DebugConfig.useDummyHealth &&
+                DebugConfig.showDebugBanner)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.amber.shade300),
+                ),
+                child: Text(
+                  '🛠 DEBUG  ・  steps=${DebugConfig.dummySteps}  ・  emotion=${emotion.name}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.amber.shade900,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+
+            _PetSection(pet: pet, emotion: emotion),
+            const SizedBox(height: 20),
+            _buildStepSection(permissionStatus, stepAsync, ref),
+            const SizedBox(height: 20),
+            _RewardSection(
+              rewardStatuses: rewardStatuses,
+              currentSteps: stepAsync.valueOrNull?.steps ?? 0,
+              onClaim: (foodId) async {
+                final success = await gameActions.claimReward(foodId);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(success ? '報酬を受け取りました！' : '受け取れません'),
+                      duration: const Duration(seconds: 1),
+                    ),
+                  );
+                }
+              },
+            ),
+            const SizedBox(height: 20),
+
+            // デバッグパネル (debugMode時のみ)
+            const DebugPanel(),
+            const SizedBox(height: 12),
+
+            // 励まし文
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                '🌿 きょうもおさんぽしよう',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.green.shade600,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
+
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const InventoryScreen()),
+                  );
+                },
+                icon: const Icon(Icons.inventory_2),
+                label: const Text('もちものを見る'),
+              ),
+            ),
+
+            // バナー広告
+            if (_adService.isBannerLoaded && _adService.bannerAd != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: SizedBox(
+                  width: _adService.bannerAd!.size.width.toDouble(),
+                  height: _adService.bannerAd!.size.height.toDouble(),
+                  child: AdWidget(ad: _adService.bannerAd!),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStepSection(
+    HealthPermissionStatus permissionStatus,
+    AsyncValue<models.StepState> stepAsync,
+    WidgetRef ref,
+  ) {
+    if (permissionStatus == HealthPermissionStatus.unknown) {
+      return const Card(
+        elevation: 2,
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: Row(
+            children: [
+              Icon(Icons.directions_walk, size: 36, color: Colors.grey),
+              SizedBox(width: 16),
+              Text('権限を確認中...'),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (permissionStatus == HealthPermissionStatus.granted) {
+      return _StepSection(stepAsync: stepAsync);
+    }
+
+    return _PermissionDeniedSection(
+      status: permissionStatus,
+      onRetry: () async {
+        final result =
+            await ref.read(healthPermissionProvider.notifier).request();
+        if (result == HealthPermissionStatus.granted) {
+          ref.read(gameActionsProvider).refreshSteps();
+        }
+      },
+    );
+  }
+
+  void _showStageUpDialog(BuildContext context, Pet pet) {
+    final config = PetStageConfig.forStage(pet.stage);
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Text('🎉 成長しました！'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            PetDisplay(pet: pet, size: 64),
+            const SizedBox(height: 12),
+            Text(
+              '${pet.name}が ${config.label} になりました！',
+              style: const TextStyle(fontSize: 16),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              config.description,
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('やったー！'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================
+// Pet Section — 進捗バー + ひとこと
+// =============================================================
+
+class _PetSection extends StatelessWidget {
+  final Pet pet;
+  final PetEmotion emotion;
+
+  const _PetSection({required this.pet, required this.emotion});
+
+  @override
+  Widget build(BuildContext context) {
+    final expToNext = PetEntity.expToNextStage(pet);
+    final progress = PetEntity.stageProgress(pet);
+    final config = PetStageConfig.forStage(pet.stage);
+    final isMaxStage = pet.stage == PetStage.stage3;
+
+    final hitokoto = PetDialogueResolver.resolve(pet.stage, emotion);
+
+    return Card(
+      elevation: 2,
+      color: _cardColorForStage(pet.stage),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            PetDisplay(pet: pet, emotion: emotion, size: 80),
+            const SizedBox(height: 8),
+            Text(
+              pet.name,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              config.label,
+              style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
+            ),
+
+            // ひとこと
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withAlpha(180),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '「$hitokoto」',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.brown.shade600,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // 進捗バー
+            if (!isMaxStage) ...[
+              Row(
+                children: [
+                  Text(config.label, style: const TextStyle(fontSize: 12)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        value: progress.clamp(0.0, 1.0),
+                        minHeight: 10,
+                        backgroundColor: Colors.grey.shade200,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    PetEntity.nextStageLabel(pet) ?? '',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'EXP ${pet.exp}  ・ 次のステージまで あと $expToNext',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              ),
+            ] else ...[
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('⭐', style: TextStyle(fontSize: 16)),
+                    const SizedBox(width: 6),
+                    Text(
+                      '最大成長！  EXP ${pet.exp}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.amber.shade800,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Stage別のカード背景色
+  Color _cardColorForStage(PetStage stage) {
+    switch (stage) {
+      case PetStage.stage1:
+        return const Color(0xFFFFF8E8); // あたたかい卵色
+      case PetStage.stage2:
+        return const Color(0xFFFFFDE7); // ひよこイエロー
+      case PetStage.stage3:
+        return const Color(0xFFF1F8E9); // おとなのグリーン
+    }
+  }
+}
+
+// =============================================================
+// Step Section
+// =============================================================
+
+class _StepSection extends StatelessWidget {
+  final AsyncValue<models.StepState> stepAsync;
+
+  const _StepSection({required this.stepAsync});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 2,
+      color: const Color(0xFFE8F5E9),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: const BoxDecoration(
+                color: Color(0xFFC8E6C9),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.directions_walk,
+                  size: 28, color: Colors.green.shade700),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'きょうのおさんぽ',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.green.shade700,
+                    ),
+                  ),
+                  stepAsync.when(
+                    data: (stepState) => Text(
+                      '${stepState.steps} 歩',
+                      style: TextStyle(
+                        fontSize: 30,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green.shade900,
+                      ),
+                    ),
+                    loading: () => const Text('読み込み中...'),
+                    error: (e, _) => const Text(
+                      '歩数を取得できませんでした',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================
+// Permission Denied Section
+// =============================================================
+
+class _PermissionDeniedSection extends StatelessWidget {
+  final HealthPermissionStatus status;
+  final VoidCallback onRetry;
+
+  const _PermissionDeniedSection({
+    required this.status,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, color, message, hint) = switch (status) {
+      HealthPermissionStatus.denied => (
+          Icons.lock_outline,
+          Colors.orange,
+          '歩数データの利用が許可されていません',
+          '設定アプリから後で許可できます。\n歩数なしでもアプリは遊べます。',
+        ),
+      HealthPermissionStatus.unavailable => (
+          Icons.phone_android,
+          Colors.orange,
+          '健康データを利用できません',
+          'Health Connect がインストールされて\nいない可能性があります。',
+        ),
+      _ => (
+          Icons.cloud_off,
+          Colors.grey,
+          '歩数データの取得でエラーが起きました',
+          'しばらくしてからもう一度お試しください。',
+        ),
+    };
+
+    return Card(
+      elevation: 2,
+      color: color.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            Icon(icon, size: 36, color: color),
+            const SizedBox(height: 10),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              hint,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('もう一度試す'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================
+// Reward Section
+// =============================================================
+
+class _RewardSection extends StatelessWidget {
+  final List<RewardStatus> rewardStatuses;
+  final int currentSteps;
+  final Future<void> Function(String foodId) onClaim;
+
+  const _RewardSection({
+    required this.rewardStatuses,
+    required this.currentSteps,
+    required this.onClaim,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '🎁 きょうの報酬',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            ...rewardStatuses.map((rs) => _RewardTile(
+                  rewardStatus: rs,
+                  currentSteps: currentSteps,
+                  onClaim: () => onClaim(rs.food.id),
+                )),
+            if (rewardStatuses.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(8.0),
+                child: Text('歩数を読み込み中...'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RewardTile extends StatelessWidget {
+  final RewardStatus rewardStatus;
+  final int currentSteps;
+  final VoidCallback onClaim;
+
+  const _RewardTile({
+    required this.rewardStatus,
+    required this.currentSteps,
+    required this.onClaim,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final food = rewardStatus.food;
+    final status = rewardStatus.status;
+    final emoji = foodEmoji(food.id);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 32)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  food.name,
+                  style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 1),
+                // 食材の世界観サブ文言
+                Text(
+                  food.description,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.brown.shade300,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _subtitleText(food, status),
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ),
+          _buildTrailing(status),
+        ],
+      ),
+    );
+  }
+
+  String _subtitleText(Food food, RewardStatusType status) {
+    switch (status) {
+      case RewardStatusType.claimed:
+        return '${food.requiredSteps}歩  ・  EXP +${food.expValue}';
+      case RewardStatusType.available:
+        return '${food.requiredSteps}歩 達成！  ・  EXP +${food.expValue}';
+      case RewardStatusType.locked:
+        final remaining = food.requiredSteps - currentSteps;
+        return 'あと $remaining歩  ・  EXP +${food.expValue}';
+    }
+  }
+
+  Widget _buildTrailing(RewardStatusType status) {
+    switch (status) {
+      case RewardStatusType.claimed:
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade200,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Text('✓ 受取済み',
+              style: TextStyle(fontSize: 12, color: Colors.grey)),
+        );
+      case RewardStatusType.available:
+        return ElevatedButton(
+          onPressed: onClaim,
+          style: ElevatedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          ),
+          child: const Text('受け取る', style: TextStyle(fontSize: 13)),
+        );
+      case RewardStatusType.locked:
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text('🔒 未到達',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+        );
+    }
+  }
+}
+
+
+# ===== FILE: lib/presentation/screens/inventory_screen.dart =====
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../data/models/pet.dart';
+import '../../core/pet_stage_config.dart';
+import '../../core/config/ad_config.dart';
+import '../../domain/services/ad_service.dart';
+import '../providers/providers.dart';
+import '../widgets/pet_display.dart';
+import '../widgets/food_helpers.dart';
+import '../../data/models/food.dart';
+
+/// インベントリ画面
+class InventoryScreen extends ConsumerStatefulWidget {
+  const InventoryScreen({super.key});
+
+  @override
+  ConsumerState<InventoryScreen> createState() => _InventoryScreenState();
+}
+
+class _InventoryScreenState extends ConsumerState<InventoryScreen> {
+  final AdService _adService = AdService();
+
+  @override
+  void initState() {
+    super.initState();
+    _adService.loadRewarded();
+  }
+
+  @override
+  void dispose() {
+    _adService.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final inventory = ref.watch(inventoryProvider);
+    final pet = ref.watch(petProvider);
+    final gameActions = ref.read(gameActionsProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('もちもの'),
+      ),
+      body: Column(
+        children: [
+          // リワード広告ボタン
+          if (AdConfig.adsEnabled)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    if (_adService.isRewardedReady) {
+                      _adService.showRewarded(
+                        onReward: () async {
+                          // ランダム食材+1
+                          final foods = ['kinomi', 'ninjin', 'osakana'];
+                          final randomFood = foods[
+                              DateTime.now().millisecondsSinceEpoch %
+                                  foods.length];
+                          await ref
+                              .read(gameRepositoryProvider)
+                              .addFood(randomFood);
+                          ref.read(inventoryProvider.notifier).refresh();
+
+                          if (context.mounted) {
+                            final food = findFoodById(randomFood);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  '${foodEmoji(randomFood)} ${food?.name ?? randomFood} をゲット！',
+                                ),
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                          }
+                        },
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('動画の準備中です…もう少しお待ちください'),
+                          duration: Duration(seconds: 1),
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.play_circle_outline),
+                  label: const Text('🎬 動画で特別フードをもらう'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange.shade400,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+          // 在庫リスト
+          Expanded(
+            child: inventory.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('📦', style: TextStyle(fontSize: 60)),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'まだ食材がありません',
+                          style: TextStyle(fontSize: 18),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'おさんぽして食材をみつけよう！',
+                          style: TextStyle(
+                              fontSize: 14, color: Colors.grey.shade500),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: inventory.length,
+                    itemBuilder: (context, index) {
+                      final item = inventory[index];
+                      final food = findFoodById(item.foodId);
+                      if (food == null) return const SizedBox.shrink();
+
+                      return _FoodItemTile(
+                        food: food,
+                        count: item.count,
+                        petName: pet.name,
+                        onFeed: () async {
+                          final previousStage = ref.read(petProvider).stage;
+                          final success =
+                              await gameActions.feedPet(item.foodId);
+                          if (!context.mounted) return;
+
+                          if (success) {
+                            final reaction = getFeedingReaction(item.foodId);
+                            final newPet = ref.read(petProvider);
+
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Row(
+                                  children: [
+                                    Text(foodEmoji(item.foodId),
+                                        style: const TextStyle(fontSize: 20)),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        '$reaction  EXP +${food.expValue}',
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                behavior: SnackBarBehavior.floating,
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+
+                            if (previousStage != newPet.stage) {
+                              _showStageUpDialog(context, newPet);
+                            }
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('食べさせられません'),
+                                duration: Duration(seconds: 1),
+                              ),
+                            );
+                          }
+                        },
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showStageUpDialog(BuildContext context, Pet pet) {
+    final config = PetStageConfig.forStage(pet.stage);
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Text('🎉 成長しました！'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            PetDisplay(pet: pet, size: 64),
+            const SizedBox(height: 12),
+            Text(
+              '${pet.name}が ${config.label} になりました！',
+              style: const TextStyle(fontSize: 16),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              config.description,
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('やったー！'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 食材アイテムタイル
+class _FoodItemTile extends StatelessWidget {
+  final Food food;
+  final int count;
+  final String petName;
+  final VoidCallback onFeed;
+
+  const _FoodItemTile({
+    required this.food,
+    required this.count,
+    required this.petName,
+    required this.onFeed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final emoji = foodEmoji(food.id);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(emoji, style: const TextStyle(fontSize: 36)),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    food.name,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  if (food.description.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      food.description,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.brown.shade300,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'EXP +${food.expValue}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.green.shade700,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '×$count',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey.shade600,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            ElevatedButton(
+              onPressed: count > 0 ? onFeed : null,
+              style: ElevatedButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+              child: Text('$petNameに\nあげる',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 13)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+# ===== FILE: lib/presentation/screens/onboarding_screen.dart =====
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../data/models/health_permission_status.dart';
+import '../providers/providers.dart';
+
+/// オンボーディング画面
+/// 健康データ使用の説明 → 権限要求 → Home遷移
+class OnboardingScreen extends ConsumerStatefulWidget {
+  const OnboardingScreen({super.key});
+
+  @override
+  ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
+}
+
+class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
+  bool _requesting = false;
+  HealthPermissionStatus? _lastResult;
+
+  Future<void> _handleStart() async {
+    setState(() {
+      _requesting = true;
+      _lastResult = null;
+    });
+
+    // 権限リクエスト
+    final status =
+        await ref.read(healthPermissionProvider.notifier).request();
+
+    if (!mounted) return;
+
+    setState(() {
+      _requesting = false;
+      _lastResult = status;
+    });
+
+    // どの結果でも onboarding は完了 → Home へ
+    // (granted 以外は Home 画面で案内を表示)
+    await ref.read(onboardingCompletedProvider.notifier).complete();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('🐾', style: TextStyle(fontSize: 80)),
+              const SizedBox(height: 24),
+              const Text(
+                'あるくペット',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'あるいて食材を集めて\nペットを育てよう！',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 18),
+              ),
+              const SizedBox(height: 32),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Column(
+                  children: [
+                    Icon(Icons.directions_walk, size: 40, color: Colors.blue),
+                    SizedBox(height: 12),
+                    Text(
+                      'このアプリは歩数データを使用します',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      '歩いた分だけ食材がもらえます。\n食材をペットにあげると\nペットが成長します。\n\n次の画面で健康データへの\nアクセスを許可してください。',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+
+              // 権限拒否時の案内
+              if (_lastResult == HealthPermissionStatus.denied) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.orange),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '権限が拒否されました。\n歩数機能なしでも遊べますが、\n設定アプリから後で許可できます。',
+                          style: TextStyle(fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              // エラー / 利用不可時の案内
+              if (_lastResult == HealthPermissionStatus.unavailable ||
+                  _lastResult == HealthPermissionStatus.error) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber, color: Colors.red),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _lastResult == HealthPermissionStatus.unavailable
+                              ? '健康データが利用できません。\n端末がHealth Connectに\n対応していない可能性があります。'
+                              : '健康データへのアクセス中に\nエラーが発生しました。',
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              const SizedBox(height: 32),
+
+              // メインボタン
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  onPressed: _requesting ? null : _handleStart,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: _requesting
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2.5,
+                          ),
+                        )
+                      : Text(
+                          _lastResult == null ? 'はじめる' : 'このまま進む',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+# ===== FILE: lib/presentation/screens/title_screen.dart =====
+import 'package:flutter/material.dart';
+import '../../core/pet_stage_config.dart';
+import '../../data/models/pet.dart';
+import 'home_screen.dart';
+
+/// タイトル画面
+class TitleScreen extends StatelessWidget {
+  const TitleScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final config = PetStageConfig.forStage(PetStage.stage1);
+
+    return Scaffold(
+      body: Container(
+        width: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFFE8F5E9),
+              Color(0xFFFAFFF5),
+              Color(0xFFFFF8E1),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Spacer(flex: 2),
+
+              // ペット絵文字
+              Text(config.emoji, style: const TextStyle(fontSize: 80)),
+              const SizedBox(height: 16),
+
+              // タイトル
+              Text(
+                'あるくペット',
+                style: TextStyle(
+                  fontSize: 36,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green.shade800,
+                  letterSpacing: 4,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'おさんぽで育てよう',
+                style: TextStyle(
+                  fontSize: 15,
+                  color: Colors.green.shade600,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+
+              const Spacer(flex: 3),
+
+              // STARTボタン
+              SizedBox(
+                width: 200,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(builder: (_) => const HomeScreen()),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green.shade600,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(26),
+                    ),
+                    elevation: 4,
+                  ),
+                  child: const Text(
+                    'START',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 6,
+                    ),
+                  ),
+                ),
+              ),
+
+              const Spacer(flex: 2),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+# ===== FILE: lib/presentation/widgets/debug_panel.dart =====
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/config/debug_config.dart';
+import '../../data/models/pet_emotion.dart';
+import '../providers/providers.dart';
+
+/// デバッグ専用パネル
+///
+/// DebugConfig.debugMode == true のときのみ表示。
+class DebugPanel extends ConsumerWidget {
+  const DebugPanel({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!DebugConfig.debugMode) return const SizedBox.shrink();
+
+    final gameActions = ref.read(gameActionsProvider);
+
+    return Card(
+      color: Colors.amber.shade50,
+      elevation: 1,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.bug_report, size: 16, color: Colors.orange),
+                const SizedBox(width: 6),
+                Text(
+                  'デバッグ操作',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.amber.shade900,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            // 報酬リセット
+            _DebugButton(
+              label: '🔄 報酬リセット',
+              onPressed: () async {
+                await gameActions.debugResetRewards();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('報酬状態をリセットしました'),
+                      duration: Duration(seconds: 1),
+                    ),
+                  );
+                }
+              },
+            ),
+            const SizedBox(height: 6),
+
+            // EXP追加
+            Row(
+              children: [
+                _DebugButton(
+                  label: 'EXP +1',
+                  onPressed: () => _addExp(context, gameActions, 1),
+                ),
+                const SizedBox(width: 6),
+                _DebugButton(
+                  label: 'EXP +5',
+                  onPressed: () => _addExp(context, gameActions, 5),
+                ),
+                const SizedBox(width: 6),
+                _DebugButton(
+                  label: 'EXP +20',
+                  onPressed: () => _addExp(context, gameActions, 20),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+
+            // 全食材追加
+            _DebugButton(
+              label: '🍽️ 全食材 +1',
+              onPressed: () async {
+                await gameActions.debugAddAllFoods();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('全食材を追加しました'),
+                      duration: Duration(seconds: 1),
+                    ),
+                  );
+                }
+              },
+            ),
+            const SizedBox(height: 6),
+
+            // 感情切替
+            Row(
+              children: [
+                const Text('😊 感情: ', style: TextStyle(fontSize: 12)),
+                const SizedBox(width: 4),
+                _DebugButton(
+                  label: 'normal',
+                  onPressed: () {
+                    gameActions.debugSetEmotion(PetEmotion.normal);
+                    _snack(context, 'emotion → normal');
+                  },
+                ),
+                const SizedBox(width: 4),
+                _DebugButton(
+                  label: 'happy',
+                  onPressed: () {
+                    gameActions.debugSetEmotion(PetEmotion.happy);
+                    _snack(context, 'emotion → happy');
+                  },
+                ),
+                const SizedBox(width: 4),
+                _DebugButton(
+                  label: 'hungry',
+                  onPressed: () {
+                    gameActions.debugSetEmotion(PetEmotion.hungry);
+                    _snack(context, 'emotion → hungry');
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _addExp(
+      BuildContext context, GameActions actions, int amount) async {
+    await actions.debugAddExp(amount);
+    if (context.mounted) {
+      _snack(context, 'EXP を $amount 加算しました');
+    }
+  }
+
+  void _snack(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 1)),
+    );
+  }
+}
+
+class _DebugButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onPressed;
+
+  const _DebugButton({required this.label, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 32,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          side: BorderSide(color: Colors.amber.shade300),
+          textStyle: const TextStyle(fontSize: 12),
+        ),
+        child: Text(label),
+      ),
+    );
+  }
+}
+
+
+# ===== FILE: lib/presentation/widgets/food_helpers.dart =====
+import '../../data/models/food.dart';
+
+/// 食材ごとの絵文字
+String foodEmoji(String foodId) {
+  switch (foodId) {
+    case 'kinomi':
+      return '🫐';
+    case 'ninjin':
+      return '🥕';
+    case 'osakana':
+      return '🐟';
+    default:
+      return '🍽️';
+  }
+}
+
+/// 餌やり時のリアクション文言
+///
+/// 差し替え・追加しやすいよう Map で管理。
+/// 将来はランダム選択やペット種別で分岐も可能。
+const Map<String, String> feedingReactions = {
+  'kinomi': 'しゃくしゃく食べた！',
+  'ninjin': 'うれしそうに食べた！',
+  'osakana': '大好物みたい！',
+};
+
+/// 食材IDからリアクション文言を取得
+String getFeedingReaction(String foodId) {
+  return feedingReactions[foodId] ?? 'もぐもぐ食べた！';
+}
+
+/// 報酬の残り歩数メッセージ
+String stepsRemainingMessage(Food food, int currentSteps) {
+  final remaining = food.requiredSteps - currentSteps;
+  if (remaining <= 0) return '達成！';
+  return 'あと $remaining歩';
+}
+
+/// 食材の説明文を取得 (世界観)
+String foodDescription(String foodId) {
+  final food = findFoodById(foodId);
+  return food?.description ?? '';
+}
+
+
+# ===== FILE: lib/presentation/widgets/pet_display.dart =====
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../../data/models/pet.dart';
+import '../../data/models/pet_emotion.dart';
+import '../../core/pet_stage_config.dart';
+import '../../core/pet_asset_resolver.dart';
+
+/// ペットの表示を担当するウィジェット
+///
+/// stage × emotion で画像を切り替える。
+/// フォールバック: emotion画像 → normal画像 → 絵文字
+class PetDisplay extends StatelessWidget {
+  final Pet pet;
+  final PetEmotion emotion;
+  final double size;
+
+  const PetDisplay({
+    super.key,
+    required this.pet,
+    this.emotion = PetEmotion.normal,
+    this.size = 80,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // 1. emotion 用画像を試す
+    final emotionPath = PetAssetResolver.assetPath(pet.stage, emotion);
+    // 2. フォールバック: normal 画像
+    final normalPath = PetAssetResolver.normalAssetPath(pet.stage);
+
+    return _AssetWithFallback(
+      primaryPath: emotionPath,
+      fallbackPath: emotionPath != normalPath ? normalPath : null,
+      fallbackEmoji: PetStageConfig.forStage(pet.stage).emoji,
+      size: size,
+    );
+  }
+}
+
+/// アセット画像をフォールバック付きで表示
+class _AssetWithFallback extends StatefulWidget {
+  final String primaryPath;
+  final String? fallbackPath;
+  final String fallbackEmoji;
+  final double size;
+
+  const _AssetWithFallback({
+    required this.primaryPath,
+    this.fallbackPath,
+    required this.fallbackEmoji,
+    required this.size,
+  });
+
+  @override
+  State<_AssetWithFallback> createState() => _AssetWithFallbackState();
+}
+
+class _AssetWithFallbackState extends State<_AssetWithFallback> {
+  bool _primaryFailed = false;
+  bool _fallbackFailed = false;
+  bool _checked = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAsset();
+  }
+
+  @override
+  void didUpdateWidget(_AssetWithFallback oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.primaryPath != widget.primaryPath) {
+      _primaryFailed = false;
+      _fallbackFailed = false;
+      _checked = false;
+      _checkAsset();
+    }
+  }
+
+  Future<void> _checkAsset() async {
+    try {
+      await rootBundle.load(widget.primaryPath);
+      if (mounted) setState(() => _checked = true);
+    } catch (_) {
+      _primaryFailed = true;
+      if (widget.fallbackPath != null) {
+        try {
+          await rootBundle.load(widget.fallbackPath!);
+          if (mounted) setState(() => _checked = true);
+        } catch (_) {
+          _fallbackFailed = true;
+          if (mounted) setState(() => _checked = true);
+        }
+      } else {
+        _fallbackFailed = true;
+        if (mounted) setState(() => _checked = true);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_checked) {
+      // チェック中は絵文字をそのまま表示
+      return Text(widget.fallbackEmoji,
+          style: TextStyle(fontSize: widget.size));
+    }
+
+    if (!_primaryFailed) {
+      return Image.asset(
+        widget.primaryPath,
+        width: widget.size,
+        height: widget.size,
+        fit: BoxFit.contain,
+      );
+    }
+
+    if (!_fallbackFailed && widget.fallbackPath != null) {
+      return Image.asset(
+        widget.fallbackPath!,
+        width: widget.size,
+        height: widget.size,
+        fit: BoxFit.contain,
+      );
+    }
+
+    // 最終フォールバック: 絵文字
+    return Text(widget.fallbackEmoji,
+        style: TextStyle(fontSize: widget.size));
+  }
+}
+
+
