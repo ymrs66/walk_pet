@@ -41,7 +41,7 @@
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>歩数データを読み取り、おさんぽ量に応じた報酬やペットの成長に反映するために使用します。</string>
 	<key>GADApplicationIdentifier</key>
-	<string>ca-app-pub-3940256099942544~1458002511</string>
+	<string>ca-app-pub-7942729921826461~7246232178</string>
 	<key>NSUserTrackingUsageDescription</key>
 	<string>広告表示とアプリ改善のために利用状況に関する許可をお願いしています。</string>
 	<key>UIDeviceFamily</key>

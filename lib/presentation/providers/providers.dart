@@ -330,8 +330,9 @@ final rewardStatusListProvider = Provider<List<RewardStatus>>((ref) {
   final rewardState = ref.watch(rewardStateProvider);
 
   return stepAsync.when(
-    data: (stepState) =>
-        RewardService.getAllRewardStatuses(stepState.steps, rewardState),
+    data: (stepState) => stepState.loadFailed
+        ? []
+        : RewardService.getAllRewardStatuses(stepState.steps, rewardState),
     loading: () => [],
     error: (_, _) => [],
   );

@@ -13,7 +13,7 @@ enum AppMode { dev, testFlight, release }
 /// 個別に書き換える必要はありません。
 class DebugConfig {
   // ↓ ここを変更するだけ ↓
-  static const AppMode currentMode = AppMode.testFlight;
+  static const AppMode currentMode = AppMode.release;
 
   // --- derived flags ---
 

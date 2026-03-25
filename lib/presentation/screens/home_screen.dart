@@ -46,7 +46,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     Future.microtask(() async {
-      await ref.read(healthPermissionProvider.notifier).ensureAuthorized();
+      // 権限は check のみ (request は OnboardingScreen で実施済み)
+      await ref.read(healthPermissionProvider.notifier).check();
       final status = ref.read(healthPermissionProvider);
       if (status == HealthPermissionStatus.granted) {
         await ref.read(gameActionsProvider).refreshSteps();
@@ -59,9 +60,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       }
       ref.read(emotionProvider.notifier).refresh();
       _showIntroIfNeeded();
+      // 広告初期化 (権限導線の後に直列実行)
+      await _initAdsAndLoadBanner();
     });
-    // バナー広告読み込み (bootstrap完了後)
-    _initAdsAndLoadBanner();
   }
 
   /// 広告SDK初期化 → バナー読み込み
@@ -227,11 +228,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             _NextGoalBanner(
               rewardStatuses: rewardStatuses,
               currentSteps: stepAsync.valueOrNull?.steps ?? 0,
+              stepLoadFailed: stepAsync.valueOrNull?.loadFailed ?? false,
             ),
             const SizedBox(height: 12),
             _RewardSection(
               rewardStatuses: rewardStatuses,
               currentSteps: stepAsync.valueOrNull?.steps ?? 0,
+              stepLoadFailed: stepAsync.valueOrNull?.loadFailed ?? false,
               onClaim: (foodId) async {
                 final success = await gameActions.claimReward(foodId);
                 if (context.mounted) {
@@ -697,7 +700,7 @@ class _PetSection extends StatelessWidget {
 // Step Section
 // =============================================================
 
-class _StepSection extends StatelessWidget {
+class _StepSection extends ConsumerWidget {
   final AsyncValue<models.StepState> stepAsync;
   final StreakState streak;
   final int totalSteps;
@@ -709,7 +712,7 @@ class _StepSection extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Card(
       elevation: 2,
       color: const Color(0xFFE8F5E9),
@@ -741,14 +744,53 @@ class _StepSection extends StatelessWidget {
                         ),
                       ),
                       stepAsync.when(
-                        data: (stepState) => Text(
-                          '${stepState.steps} 歩',
-                          style: TextStyle(
-                            fontSize: 30,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green.shade900,
-                          ),
-                        ),
+                        data: (stepState) {
+                          if (stepState.loadFailed) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '歩数を取得できませんでした',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.orange.shade800,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'ヘルスケア連携や設定状況を\nご確認ください',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade600,
+                                    height: 1.4,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                OutlinedButton.icon(
+                                  onPressed: () {
+                                    ref.invalidate(stepProvider);
+                                  },
+                                  icon: const Icon(Icons.refresh, size: 16),
+                                  label: const Text('もう一度確認',
+                                      style: TextStyle(fontSize: 13)),
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 6),
+                                  ),
+                                ),
+                              ],
+                            );
+                          }
+                          return Text(
+                            '${stepState.steps} 歩',
+                            style: TextStyle(
+                              fontSize: 30,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green.shade900,
+                            ),
+                          );
+                        },
                         loading: () => const Text('読み込み中...'),
                         error: (e, _) => const Text(
                           '歩数を取得できませんでした',
@@ -959,14 +1001,28 @@ class _PermissionRequestSection extends StatelessWidget {
 class _NextGoalBanner extends StatelessWidget {
   final List<RewardStatus> rewardStatuses;
   final int currentSteps;
+  final bool stepLoadFailed;
 
   const _NextGoalBanner({
     required this.rewardStatuses,
     required this.currentSteps,
+    this.stepLoadFailed = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    // 歩数取得失敗時は案内表示
+    if (stepLoadFailed) {
+      return _buildBanner(
+        color: Colors.grey.shade50,
+        borderColor: Colors.grey.shade200,
+        emoji: '📊',
+        title: '歩数取得後に表示されます',
+        titleColor: Colors.grey.shade600,
+        subtitle: '歩数データを確認してください',
+        subtitleColor: Colors.grey.shade400,
+      );
+    }
     if (rewardStatuses.isEmpty) return const SizedBox.shrink();
 
     // 受取可能な報酬を探す
@@ -1117,11 +1173,13 @@ class _InventoryShortcut extends StatelessWidget {
 class _RewardSection extends StatelessWidget {
   final List<RewardStatus> rewardStatuses;
   final int currentSteps;
+  final bool stepLoadFailed;
   final Future<void> Function(String foodId) onClaim;
 
   const _RewardSection({
     required this.rewardStatuses,
     required this.currentSteps,
+    this.stepLoadFailed = false,
     required this.onClaim,
   });
 
@@ -1139,16 +1197,30 @@ class _RewardSection extends StatelessWidget {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
-            ...rewardStatuses.map((rs) => _RewardTile(
-                  rewardStatus: rs,
-                  currentSteps: currentSteps,
-                  onClaim: () => onClaim(rs.food.id),
-                )),
-            if (rewardStatuses.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(8.0),
-                child: Text('歩数を読み込み中...'),
-              ),
+            // 歩数取得失敗時は報酬判定せず案内
+            if (stepLoadFailed)
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text(
+                  '歩数取得後に判定します',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              )
+            else ...[
+              ...rewardStatuses.map((rs) => _RewardTile(
+                    rewardStatus: rs,
+                    currentSteps: currentSteps,
+                    onClaim: () => onClaim(rs.food.id),
+                  )),
+              if (rewardStatuses.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: Text('歩数を読み込み中...'),
+                ),
+            ],
           ],
         ),
       ),

@@ -30,7 +30,11 @@ class RealHealthRepository implements HealthRepository {
     final now = DateTime.now();
     final dateStr =
         '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    return StepState(date: dateStr, steps: steps ?? 0);
+    return StepState(
+      date: dateStr,
+      steps: steps ?? 0,
+      loadFailed: steps == null,
+    );
   }
 
   @override
