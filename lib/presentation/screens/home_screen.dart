@@ -21,6 +21,7 @@ import '../widgets/pet_display.dart';
 import '../widgets/food_helpers.dart';
 import '../widgets/debug_panel.dart';
 import 'inventory_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// ホーム画面
 ///
@@ -485,6 +486,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               onTap: () {
                 Navigator.of(context).pop();
                 _showResetConfirmation(context);
+              },
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: Icon(Icons.privacy_tip_outlined,
+                  color: Colors.blue.shade400),
+              title: const Text('プライバシーポリシー'),
+              onTap: () {
+                launchUrl(
+                  Uri.parse('https://walkpet.jp/privacy.html'),
+                  mode: LaunchMode.externalApplication,
+                );
               },
             ),
           ],
