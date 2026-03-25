@@ -1,9 +1,7 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
-import 'core/config/ad_config.dart';
 import 'presentation/providers/providers.dart';
 import 'presentation/screens/onboarding_screen.dart';
 import 'presentation/screens/title_screen.dart';
@@ -11,10 +9,10 @@ import 'presentation/screens/title_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // AdMob 初期化 (広告有効時のみ)
-  if (AdConfig.adsEnabled && (Platform.isIOS || Platform.isAndroid)) {
-    await MobileAds.instance.initialize();
-  }
+  // 縦固定
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+  ]);
 
   final prefs = await SharedPreferences.getInstance();
 

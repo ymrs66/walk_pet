@@ -1,10 +1,8 @@
 # ===== FILE: lib/main.dart =====
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
-import 'core/config/ad_config.dart';
 import 'presentation/providers/providers.dart';
 import 'presentation/screens/onboarding_screen.dart';
 import 'presentation/screens/title_screen.dart';
@@ -12,10 +10,10 @@ import 'presentation/screens/title_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // AdMob 初期化 (広告有効時のみ)
-  if (AdConfig.adsEnabled && (Platform.isIOS || Platform.isAndroid)) {
-    await MobileAds.instance.initialize();
-  }
+  // 縦固定
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+  ]);
 
   final prefs = await SharedPreferences.getInstance();
 
@@ -1103,6 +1101,9 @@ class LocalDatasource {
   static const _introShownKey = 'intro_shown';
   static const _lastFedAtKey = 'last_fed_at';
   static const _streakKey = 'streak_data';
+  static const _lifetimeStepsKey = 'lifetime_steps_total';
+  static const _snapshotDateKey = 'daily_step_snapshot_date';
+  static const _snapshotValueKey = 'daily_step_snapshot_value';
 
   final SharedPreferences _prefs;
 
@@ -1194,6 +1195,47 @@ class LocalDatasource {
     final json = _prefs.getString(_streakKey);
     if (json == null) return const StreakState();
     return StreakState.fromJson(jsonDecode(json) as Map<String, dynamic>);
+  }
+
+  // --- Step Snapshot (総歩数) ---
+
+  /// 総歩数を取得
+  int loadLifetimeSteps() => _prefs.getInt(_lifetimeStepsKey) ?? 0;
+
+  /// 総歩数を保存
+  Future<void> saveLifetimeSteps(int total) async {
+    await _prefs.setInt(_lifetimeStepsKey, total);
+  }
+
+  /// 日次スナップショットの日付 (yyyy-MM-dd)
+  String? loadSnapshotDate() => _prefs.getString(_snapshotDateKey);
+
+  /// 日次スナップショットの歩数値
+  int loadSnapshotValue() => _prefs.getInt(_snapshotValueKey) ?? 0;
+
+  /// 日次スナップショットを保存
+  Future<void> saveSnapshot(String date, int steps) async {
+    await _prefs.setString(_snapshotDateKey, date);
+    await _prefs.setInt(_snapshotValueKey, steps);
+  }
+
+  // --- Reset ---
+
+  /// ゲームデータを全初期化する。
+  ///
+  /// 以下は **残す**（再表示しない）:
+  /// - オンボーディング完了フラグ (_onboardingKey)
+  /// - イントロ表示済みフラグ (_introShownKey)
+  /// - 広告ブートストラップフラグ (ads_bootstrap_done)
+  Future<void> resetAll() async {
+    await _prefs.remove(_petKey);
+    await _prefs.remove(_inventoryKey);
+    await _prefs.remove(_rewardStateKey);
+    await _prefs.remove(_lastFedAtKey);
+    await _prefs.remove(_streakKey);
+    await _prefs.remove(_lifetimeStepsKey);
+    await _prefs.remove(_snapshotDateKey);
+    await _prefs.remove(_snapshotValueKey);
   }
 }
 
@@ -1703,6 +1745,40 @@ class GameRepository {
 
   Future<void> setOnboardingCompleted(bool completed) =>
       _datasource.setOnboardingCompleted(completed);
+
+  // --- Step Snapshot (総歩数) ---
+
+  /// 現在の日次スナップショットを更新し、日付が変わっていれば前日分を total に加算。
+  ///
+  /// [todaySteps] は HealthKit から取得した今日の歩数。
+  /// 戻り値は更新後の総歩数。
+  Future<int> updateStepSnapshot(int todaySteps) async {
+    final today = _todayString();
+    final savedDate = _datasource.loadSnapshotDate();
+    var lifetime = _datasource.loadLifetimeSteps();
+
+    if (savedDate != null && savedDate != today) {
+      // 日が変わった → 前日の snapshot を total に加算
+      final yesterdaySteps = _datasource.loadSnapshotValue();
+      lifetime += yesterdaySteps;
+      await _datasource.saveLifetimeSteps(lifetime);
+    }
+
+    // 今日の snapshot を更新
+    await _datasource.saveSnapshot(today, todaySteps);
+
+    return lifetime;
+  }
+
+  /// 総歩数 (過去分の累計 + 今日の歩数)
+  int loadTotalSteps(int todaySteps) {
+    return _datasource.loadLifetimeSteps() + todaySteps;
+  }
+
+  static String _todayString() {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  }
 }
 
 
@@ -1884,6 +1960,109 @@ class PetEntity {
 }
 
 
+# ===== FILE: lib/domain/services/ads_bootstrap_service.dart =====
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:app_tracking_transparency/app_tracking_transparency.dart';
+import '../../core/config/ad_config.dart';
+
+/// 広告ブートストラップサービス
+///
+/// ATT → AdMob初期化 の順序を保証する。
+/// - iOS: 初回のみ事前説明 → ATTリクエスト → MobileAds.init
+/// - Android: MobileAds.init のみ
+/// - TestFlight/dev (adsEnabled == false): 何もしない
+class AdsBootstrapService {
+  static bool _initialized = false;
+  static bool _initializing = false;
+
+  /// 広告SDKが初期化済みか
+  static bool get isInitialized => _initialized;
+
+  static const _prefKey = 'ads_bootstrap_done';
+
+  /// 広告SDKを初期化する（1回のみ）
+  ///
+  /// [context] は ATT 事前説明ダイアログ表示に必要。
+  /// [prefs] を渡すと SharedPreferences.getInstance() の重複取得を省略できる。
+  /// 複数回呼んでも安全（初期化済みなら即 return）。
+  static Future<void> ensureInitialized(
+    BuildContext context, {
+    SharedPreferences? prefs,
+  }) async {
+    if (_initialized || !AdConfig.adsEnabled) return;
+    if (_initializing) return; // 多重実行防止
+    _initializing = true;
+
+    try {
+      final sp = prefs ?? await SharedPreferences.getInstance();
+      final alreadyBootstrapped = sp.getBool(_prefKey) ?? false;
+
+      // iOS: 初回のみ ATT 処理
+      if (Platform.isIOS && !alreadyBootstrapped) {
+        // 事前説明ダイアログ
+        if (context.mounted) {
+          await _showAttExplanationDialog(context);
+        }
+
+        // ATT リクエスト (OS標準ダイアログ)
+        await AppTrackingTransparency.requestTrackingAuthorization();
+      }
+
+      // AdMob 初期化
+      if (Platform.isIOS || Platform.isAndroid) {
+        await MobileAds.instance.initialize();
+      }
+
+      _initialized = true;
+      await sp.setBool(_prefKey, true);
+      debugPrint('[AdsBootstrap] 初期化完了');
+    } finally {
+      _initializing = false;
+    }
+  }
+
+  /// ATT 事前説明ダイアログ
+  ///
+  /// OS標準の ATT ダイアログの前に、なぜトラッキング許可が必要かを説明する。
+  static Future<void> _showAttExplanationDialog(BuildContext context) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Row(
+          children: [
+            Text('📢', style: TextStyle(fontSize: 28)),
+            SizedBox(width: 8),
+            Expanded(child: Text('広告について')),
+          ],
+        ),
+        content: const Text(
+          'このアプリは無料でお楽しみいただくために'
+          '広告を表示しています。\n\n'
+          '次の画面で「許可」を選ぶと、'
+          'あなたに合った広告が表示されます。\n'
+          '「許可しない」を選んでも、'
+          'アプリは問題なくご利用いただけます。',
+          style: TextStyle(fontSize: 14, height: 1.6),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK', style: TextStyle(fontSize: 16)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
 # ===== FILE: lib/domain/services/ad_service.dart =====
 import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
@@ -1897,12 +2076,15 @@ class AdService {
   BannerAd? _bannerAd;
   bool _isBannerLoaded = false;
   RewardedAd? _rewardedAd;
+  bool _isLoadingRewarded = false;
 
   /// バナー広告が読み込み済みか
   bool get isBannerLoaded => _isBannerLoaded;
 
   /// バナー広告インスタンス
   BannerAd? get bannerAd => _bannerAd;
+
+  // ─── Banner ───
 
   /// バナー広告を読み込む
   void loadBanner() {
@@ -1915,26 +2097,42 @@ class AdService {
       listener: BannerAdListener(
         onAdLoaded: (ad) {
           _isBannerLoaded = true;
-          _onBannerLoadedCallback?.call();
+          _onBannerStateChanged?.call();
         },
         onAdFailedToLoad: (ad, error) {
           debugPrint('Banner ad failed to load: $error');
           ad.dispose();
+          _bannerAd = null;
           _isBannerLoaded = false;
+          _onBannerStateChanged?.call();
         },
       ),
     )..load();
   }
 
-  /// バナー読み込み完了コールバック (UI更新用)
-  VoidCallback? _onBannerLoadedCallback;
-  set onBannerLoaded(VoidCallback? callback) {
-    _onBannerLoadedCallback = callback;
+  /// バナー読み込み結果コールバック (成功/失敗両方で呼ばれる)
+  VoidCallback? _onBannerStateChanged;
+  set onBannerStateChanged(VoidCallback? callback) {
+    _onBannerStateChanged = callback;
   }
 
+  /// 後方互換: 旧 setter 名
+  set onBannerLoaded(VoidCallback? callback) {
+    _onBannerStateChanged = callback;
+  }
+
+  // ─── Rewarded ───
+
+  /// リワード広告の最大再試行回数
+  static const _maxRetry = 1;
+
   /// リワード広告を読み込む
-  void loadRewarded() {
+  ///
+  /// 失敗時は [_retryDelaySec] 秒後に1回だけ自動再試行する。
+  void loadRewarded({int _retryCount = 0}) {
     if (!AdConfig.adsEnabled) return;
+    if (_isLoadingRewarded) return; // 多重呼び出し防止
+    _isLoadingRewarded = true;
 
     RewardedAd.load(
       adUnitId: AdConfig.rewardAdUnitId,
@@ -1942,10 +2140,22 @@ class AdService {
       rewardedAdLoadCallback: RewardedAdLoadCallback(
         onAdLoaded: (ad) {
           _rewardedAd = ad;
+          _isLoadingRewarded = false;
+          debugPrint('[AdService] Rewarded ad loaded');
         },
         onAdFailedToLoad: (error) {
           debugPrint('Rewarded ad failed to load: $error');
           _rewardedAd = null;
+          _isLoadingRewarded = false;
+
+          // 自動再試行 (1回のみ、3秒後)
+          if (_retryCount < _maxRetry) {
+            debugPrint('[AdService] Rewarded ad retry in 3s '
+                '(attempt ${_retryCount + 1}/$_maxRetry)');
+            Future.delayed(const Duration(seconds: 3), () {
+              loadRewarded(_retryCount: _retryCount + 1);
+            });
+          }
         },
       ),
     );
@@ -1982,6 +2192,9 @@ class AdService {
 
   /// リワード広告が表示可能か
   bool get isRewardedReady => _rewardedAd != null;
+
+  /// リワード広告を読み込み中か
+  bool get isRewardedLoading => _isLoadingRewarded;
 
   /// リソース解放
   void dispose() {
@@ -2448,6 +2661,32 @@ final streakProvider =
 });
 
 // =============================================================
+// Total Steps Provider
+// =============================================================
+
+class TotalStepsNotifier extends StateNotifier<int> {
+  final GameRepository _gameRepo;
+
+  TotalStepsNotifier(this._gameRepo) : super(0);
+
+  /// snapshot 更新 + 総歩数再計算
+  Future<void> update(int todaySteps) async {
+    await _gameRepo.updateStepSnapshot(todaySteps);
+    state = _gameRepo.loadTotalSteps(todaySteps);
+  }
+
+  /// 読み込みのみ (snapshot 更新なし)
+  void refresh(int todaySteps) {
+    state = _gameRepo.loadTotalSteps(todaySteps);
+  }
+}
+
+final totalStepsProvider =
+    StateNotifierProvider<TotalStepsNotifier, int>((ref) {
+  return TotalStepsNotifier(ref.watch(gameRepositoryProvider));
+});
+
+// =============================================================
 // Reward Status Provider
 // =============================================================
 
@@ -2522,8 +2761,11 @@ class GameActions {
     return result.success;
   }
 
-  void refreshSteps() {
+  /// 歩数を再取得し、スナップショットも更新する。
+  Future<void> refreshSteps() async {
     _ref.invalidate(stepProvider);
+    final stepState = await _ref.read(stepProvider.future);
+    await _ref.read(totalStepsProvider.notifier).update(stepState.steps);
   }
 
   /// streak を更新し、ボーナスがあれば付与
@@ -2568,6 +2810,27 @@ class GameActions {
   void debugSetEmotion(PetEmotion emotion) {
     _ref.read(emotionProvider.notifier).debugSetEmotion(emotion);
   }
+
+  // =============================================================
+  // Data Reset
+  // =============================================================
+
+  /// 全ゲームデータを初期化し、全 provider をリフレッシュする。
+  ///
+  /// intro / onboarding / 広告bootstrap は datasource 側で保持される。
+  Future<void> resetAllData() async {
+    final datasource = _ref.read(localDatasourceProvider);
+    await datasource.resetAll();
+
+    // 全 provider を最新状態に更新
+    _ref.read(petProvider.notifier).refresh();
+    _ref.read(inventoryProvider.notifier).refresh();
+    _ref.read(rewardStateProvider.notifier).refresh();
+    _ref.read(streakProvider.notifier).refresh();
+    _ref.read(emotionProvider.notifier).refresh();
+    _ref.read(totalStepsProvider.notifier).refresh(0);
+    _ref.invalidate(stepProvider);
+  }
 }
 
 
@@ -2588,6 +2851,7 @@ import '../../core/pet_dialogue_resolver.dart';
 import '../../core/config/debug_config.dart';
 import '../../data/models/pet_emotion.dart';
 import '../../domain/services/ad_service.dart';
+import '../../domain/services/ads_bootstrap_service.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import '../providers/providers.dart';
 import '../widgets/pet_display.dart';
@@ -2634,7 +2898,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       ref.read(emotionProvider.notifier).refresh();
       _showIntroIfNeeded();
     });
-    // バナー広告読み込み
+    // バナー広告読み込み (bootstrap完了後)
+    _initAdsAndLoadBanner();
+  }
+
+  /// 広告SDK初期化 → バナー読み込み
+  Future<void> _initAdsAndLoadBanner() async {
+    await AdsBootstrapService.ensureInitialized(context);
+    if (!mounted) return;
     _adService.onBannerLoaded = () {
       if (mounted) setState(() {});
     };
@@ -2718,6 +2989,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final gameActions = ref.read(gameActionsProvider);
     final emotion = ref.watch(emotionProvider);
     final streak = ref.watch(streakProvider);
+    final totalSteps = ref.watch(totalStepsProvider);
     final dialogueContext = ref.watch(dialogueContextProvider);
 
 
@@ -2744,6 +3016,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 MaterialPageRoute(builder: (_) => const InventoryScreen()),
               );
             },
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: '設定',
+            onPressed: () => _showSettingsDialog(context),
           ),
         ],
       ),
@@ -2780,7 +3057,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               dialogueContext: dialogueContext,
             ),
             const SizedBox(height: 20),
-            _buildStepSection(permissionStatus, stepAsync, ref, streak),
+            _buildStepSection(permissionStatus, stepAsync, ref, streak, totalSteps),
             const SizedBox(height: 20),
             // 次目標 & 受取可能バナー
             _NextGoalBanner(
@@ -2842,10 +3119,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     AsyncValue<models.StepState> stepAsync,
     WidgetRef ref,
     StreakState streak,
+    int totalSteps,
   ) {
     // 許可済み → 歩数表示
     if (permissionStatus == HealthPermissionStatus.granted) {
-      return _StepSection(stepAsync: stepAsync, streak: streak);
+      return _StepSection(stepAsync: stepAsync, streak: streak, totalSteps: totalSteps);
     }
 
     // 確認中
@@ -3009,6 +3287,101 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       ),
     );
   }
+
+  /// 設定ダイアログ
+  void _showSettingsDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.settings, size: 24),
+            SizedBox(width: 8),
+            Text('設定'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(Icons.delete_forever,
+                  color: Colors.red.shade400),
+              title: const Text('データを初期化'),
+              subtitle: Text(
+                'ペット・もちもの・報酬・歩数記録をリセット',
+                style: TextStyle(
+                    fontSize: 12, color: Colors.grey.shade600),
+              ),
+              onTap: () {
+                Navigator.of(context).pop();
+                _showResetConfirmation(context);
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('閉じる'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// データ初期化確認ダイアログ
+  void _showResetConfirmation(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded,
+                color: Colors.red.shade400, size: 28),
+            const SizedBox(width: 8),
+            const Text('本当に初期化しますか？'),
+          ],
+        ),
+        content: const Text(
+          'ペット・もちもの・報酬・連続記録・'
+          '歩数の累計がすべてリセットされます。\n\n'
+          'この操作は取り消せません。',
+          style: TextStyle(fontSize: 14, height: 1.6),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('キャンセル'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await ref.read(gameActionsProvider).resetAllData();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('✓ データを初期化しました'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('初期化する',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // =============================================================
@@ -3163,8 +3536,13 @@ class _PetSection extends StatelessWidget {
 class _StepSection extends StatelessWidget {
   final AsyncValue<models.StepState> stepAsync;
   final StreakState streak;
+  final int totalSteps;
 
-  const _StepSection({required this.stepAsync, required this.streak});
+  const _StepSection({
+    required this.stepAsync,
+    required this.streak,
+    required this.totalSteps,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -3243,6 +3621,17 @@ class _StepSection extends StatelessWidget {
                       ),
                     ),
                   ],
+                ),
+              ),
+            ],
+            // これまでの合計
+            if (totalSteps > 0) ...[
+              const SizedBox(height: 8),
+              Text(
+                'これまでの合計 $totalSteps 歩',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.green.shade600,
                 ),
               ),
             ],
@@ -3713,6 +4102,7 @@ import '../../data/models/pet.dart';
 import '../../core/pet_stage_config.dart';
 import '../../core/config/ad_config.dart';
 import '../../domain/services/ad_service.dart';
+import '../../domain/services/ads_bootstrap_service.dart';
 import '../providers/providers.dart';
 import '../widgets/pet_display.dart';
 import '../widgets/food_helpers.dart';
@@ -3732,6 +4122,13 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
   @override
   void initState() {
     super.initState();
+    _initAdsAndLoadRewarded();
+  }
+
+  /// 広告SDK初期化 → リワード読み込み
+  Future<void> _initAdsAndLoadRewarded() async {
+    await AdsBootstrapService.ensureInitialized(context);
+    if (!mounted) return;
     _adService.loadRewarded();
   }
 
@@ -3789,10 +4186,12 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                         },
                       );
                     } else {
+                      // 未準備 → 再読み込みを試行
+                      _adService.loadRewarded();
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('動画の準備中です…もう少しお待ちください'),
-                          duration: Duration(seconds: 1),
+                          content: Text('動画を準備しています…少し待ってからもう一度お試しください'),
+                          duration: Duration(seconds: 2),
                         ),
                       );
                     }

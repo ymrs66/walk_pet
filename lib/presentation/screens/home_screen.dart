@@ -14,6 +14,7 @@ import '../../core/pet_dialogue_resolver.dart';
 import '../../core/config/debug_config.dart';
 import '../../data/models/pet_emotion.dart';
 import '../../domain/services/ad_service.dart';
+import '../../domain/services/ads_bootstrap_service.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import '../providers/providers.dart';
 import '../widgets/pet_display.dart';
@@ -44,23 +45,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    Future.microtask(() {
-      ref.read(healthPermissionProvider.notifier).ensureAuthorized().then((_) {
-        final status = ref.read(healthPermissionProvider);
-        if (status == HealthPermissionStatus.granted) {
-          ref.read(gameActionsProvider).refreshSteps();
-          // streak 更新
-          ref.read(gameActionsProvider).checkAndUpdateStreak().then((bonuses) {
-            if (bonuses.isNotEmpty && mounted) {
-              _showStreakBonusDialog(context, bonuses);
-            }
-          });
+    Future.microtask(() async {
+      await ref.read(healthPermissionProvider.notifier).ensureAuthorized();
+      final status = ref.read(healthPermissionProvider);
+      if (status == HealthPermissionStatus.granted) {
+        await ref.read(gameActionsProvider).refreshSteps();
+        // streak は歩数確定後に評価
+        final bonuses =
+            await ref.read(gameActionsProvider).checkAndUpdateStreak();
+        if (bonuses.isNotEmpty && mounted) {
+          _showStreakBonusDialog(context, bonuses);
         }
-      });
+      }
       ref.read(emotionProvider.notifier).refresh();
       _showIntroIfNeeded();
     });
-    // バナー広告読み込み
+    // バナー広告読み込み (bootstrap完了後)
+    _initAdsAndLoadBanner();
+  }
+
+  /// 広告SDK初期化 → バナー読み込み
+  Future<void> _initAdsAndLoadBanner() async {
+    await AdsBootstrapService.ensureInitialized(context);
+    if (!mounted) return;
     _adService.onBannerLoaded = () {
       if (mounted) setState(() {});
     };
@@ -71,9 +78,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       ref.read(healthPermissionProvider.notifier).check();
-      ref.read(gameActionsProvider).refreshSteps();
       ref.read(emotionProvider.notifier).refresh();
-      ref.read(gameActionsProvider).checkAndUpdateStreak();
+      // refreshSteps 完了後に streak 更新
+      ref.read(gameActionsProvider).refreshSteps().then((_) {
+        ref.read(gameActionsProvider).checkAndUpdateStreak();
+      });
     }
   }
 
@@ -144,6 +153,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final gameActions = ref.read(gameActionsProvider);
     final emotion = ref.watch(emotionProvider);
     final streak = ref.watch(streakProvider);
+    final totalSteps = ref.watch(totalStepsProvider);
     final dialogueContext = ref.watch(dialogueContextProvider);
 
 
@@ -170,6 +180,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 MaterialPageRoute(builder: (_) => const InventoryScreen()),
               );
             },
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: '設定',
+            onPressed: () => _showSettingsDialog(context),
           ),
         ],
       ),
@@ -206,7 +221,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               dialogueContext: dialogueContext,
             ),
             const SizedBox(height: 20),
-            _buildStepSection(permissionStatus, stepAsync, ref, streak),
+            _buildStepSection(permissionStatus, stepAsync, ref, streak, totalSteps),
             const SizedBox(height: 20),
             // 次目標 & 受取可能バナー
             _NextGoalBanner(
@@ -268,10 +283,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     AsyncValue<models.StepState> stepAsync,
     WidgetRef ref,
     StreakState streak,
+    int totalSteps,
   ) {
     // 許可済み → 歩数表示
     if (permissionStatus == HealthPermissionStatus.granted) {
-      return _StepSection(stepAsync: stepAsync, streak: streak);
+      return _StepSection(stepAsync: stepAsync, streak: streak, totalSteps: totalSteps);
     }
 
     // 確認中
@@ -435,6 +451,101 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       ),
     );
   }
+
+  /// 設定ダイアログ
+  void _showSettingsDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.settings, size: 24),
+            SizedBox(width: 8),
+            Text('設定'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(Icons.delete_forever,
+                  color: Colors.red.shade400),
+              title: const Text('データを初期化'),
+              subtitle: Text(
+                'ペット・もちもの・報酬・歩数記録をリセット',
+                style: TextStyle(
+                    fontSize: 12, color: Colors.grey.shade600),
+              ),
+              onTap: () {
+                Navigator.of(context).pop();
+                _showResetConfirmation(context);
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('閉じる'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// データ初期化確認ダイアログ
+  void _showResetConfirmation(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded,
+                color: Colors.red.shade400, size: 28),
+            const SizedBox(width: 8),
+            const Text('本当に初期化しますか？'),
+          ],
+        ),
+        content: const Text(
+          'ペット・もちもの・報酬・連続記録・'
+          '歩数の累計がすべてリセットされます。\n\n'
+          'この操作は取り消せません。',
+          style: TextStyle(fontSize: 14, height: 1.6),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('キャンセル'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await ref.read(gameActionsProvider).resetAllData();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('✓ データを初期化しました'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('初期化する',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // =============================================================
@@ -589,8 +700,13 @@ class _PetSection extends StatelessWidget {
 class _StepSection extends StatelessWidget {
   final AsyncValue<models.StepState> stepAsync;
   final StreakState streak;
+  final int totalSteps;
 
-  const _StepSection({required this.stepAsync, required this.streak});
+  const _StepSection({
+    required this.stepAsync,
+    required this.streak,
+    required this.totalSteps,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -669,6 +785,17 @@ class _StepSection extends StatelessWidget {
                       ),
                     ),
                   ],
+                ),
+              ),
+            ],
+            // これまでの合計
+            if (totalSteps > 0) ...[
+              const SizedBox(height: 8),
+              Text(
+                'これまでの合計 $totalSteps 歩',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.green.shade600,
                 ),
               ),
             ],

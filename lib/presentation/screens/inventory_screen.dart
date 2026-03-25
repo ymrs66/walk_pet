@@ -4,6 +4,7 @@ import '../../data/models/pet.dart';
 import '../../core/pet_stage_config.dart';
 import '../../core/config/ad_config.dart';
 import '../../domain/services/ad_service.dart';
+import '../../domain/services/ads_bootstrap_service.dart';
 import '../providers/providers.dart';
 import '../widgets/pet_display.dart';
 import '../widgets/food_helpers.dart';
@@ -23,6 +24,13 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
   @override
   void initState() {
     super.initState();
+    _initAdsAndLoadRewarded();
+  }
+
+  /// 広告SDK初期化 → リワード読み込み
+  Future<void> _initAdsAndLoadRewarded() async {
+    await AdsBootstrapService.ensureInitialized(context);
+    if (!mounted) return;
     _adService.loadRewarded();
   }
 
@@ -80,10 +88,12 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                         },
                       );
                     } else {
+                      // 未準備 → 再読み込みを試行
+                      _adService.loadRewarded();
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('動画の準備中です…もう少しお待ちください'),
-                          duration: Duration(seconds: 1),
+                          content: Text('動画を準備しています…少し待ってからもう一度お試しください'),
+                          duration: Duration(seconds: 2),
                         ),
                       );
                     }

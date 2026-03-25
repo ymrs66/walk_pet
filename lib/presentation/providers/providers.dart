@@ -296,6 +296,32 @@ final streakProvider =
 });
 
 // =============================================================
+// Total Steps Provider
+// =============================================================
+
+class TotalStepsNotifier extends StateNotifier<int> {
+  final GameRepository _gameRepo;
+
+  TotalStepsNotifier(this._gameRepo) : super(0);
+
+  /// snapshot 更新 + 総歩数再計算
+  Future<void> update(int todaySteps) async {
+    await _gameRepo.updateStepSnapshot(todaySteps);
+    state = _gameRepo.loadTotalSteps(todaySteps);
+  }
+
+  /// 読み込みのみ (snapshot 更新なし)
+  void refresh(int todaySteps) {
+    state = _gameRepo.loadTotalSteps(todaySteps);
+  }
+}
+
+final totalStepsProvider =
+    StateNotifierProvider<TotalStepsNotifier, int>((ref) {
+  return TotalStepsNotifier(ref.watch(gameRepositoryProvider));
+});
+
+// =============================================================
 // Reward Status Provider
 // =============================================================
 
@@ -370,8 +396,11 @@ class GameActions {
     return result.success;
   }
 
-  void refreshSteps() {
+  /// 歩数を再取得し、スナップショットも更新する。
+  Future<void> refreshSteps() async {
     _ref.invalidate(stepProvider);
+    final stepState = await _ref.read(stepProvider.future);
+    await _ref.read(totalStepsProvider.notifier).update(stepState.steps);
   }
 
   /// streak を更新し、ボーナスがあれば付与
@@ -415,5 +444,26 @@ class GameActions {
 
   void debugSetEmotion(PetEmotion emotion) {
     _ref.read(emotionProvider.notifier).debugSetEmotion(emotion);
+  }
+
+  // =============================================================
+  // Data Reset
+  // =============================================================
+
+  /// 全ゲームデータを初期化し、全 provider をリフレッシュする。
+  ///
+  /// intro / onboarding / 広告bootstrap は datasource 側で保持される。
+  Future<void> resetAllData() async {
+    final datasource = _ref.read(localDatasourceProvider);
+    await datasource.resetAll();
+
+    // 全 provider を最新状態に更新
+    _ref.read(petProvider.notifier).refresh();
+    _ref.read(inventoryProvider.notifier).refresh();
+    _ref.read(rewardStateProvider.notifier).refresh();
+    _ref.read(streakProvider.notifier).refresh();
+    _ref.read(emotionProvider.notifier).refresh();
+    _ref.read(totalStepsProvider.notifier).refresh(0);
+    _ref.invalidate(stepProvider);
   }
 }

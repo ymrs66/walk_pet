@@ -147,4 +147,38 @@ class GameRepository {
 
   Future<void> setOnboardingCompleted(bool completed) =>
       _datasource.setOnboardingCompleted(completed);
+
+  // --- Step Snapshot (総歩数) ---
+
+  /// 現在の日次スナップショットを更新し、日付が変わっていれば前日分を total に加算。
+  ///
+  /// [todaySteps] は HealthKit から取得した今日の歩数。
+  /// 戻り値は更新後の総歩数。
+  Future<int> updateStepSnapshot(int todaySteps) async {
+    final today = _todayString();
+    final savedDate = _datasource.loadSnapshotDate();
+    var lifetime = _datasource.loadLifetimeSteps();
+
+    if (savedDate != null && savedDate != today) {
+      // 日が変わった → 前日の snapshot を total に加算
+      final yesterdaySteps = _datasource.loadSnapshotValue();
+      lifetime += yesterdaySteps;
+      await _datasource.saveLifetimeSteps(lifetime);
+    }
+
+    // 今日の snapshot を更新
+    await _datasource.saveSnapshot(today, todaySteps);
+
+    return lifetime;
+  }
+
+  /// 総歩数 (過去分の累計 + 今日の歩数)
+  int loadTotalSteps(int todaySteps) {
+    return _datasource.loadLifetimeSteps() + todaySteps;
+  }
+
+  static String _todayString() {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  }
 }
