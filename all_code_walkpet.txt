@@ -537,12 +537,14 @@ void main() {
 
 import 'package:device_info_plus/src/device_info_plus_web.dart';
 import 'package:shared_preferences_web/shared_preferences_web.dart';
+import 'package:url_launcher_web/url_launcher_web.dart';
 import 'package:flutter_web_plugins/flutter_web_plugins.dart';
 
 void registerPlugins([final Registrar? pluginRegistrar]) {
   final Registrar registrar = pluginRegistrar ?? webPluginRegistrar;
   DeviceInfoPlusWebPlugin.registerWith(registrar);
   SharedPreferencesPlugin.registerWith(registrar);
+  UrlLauncherPlugin.registerWith(registrar);
   registrar.registerMessageHandler();
 }
 
@@ -557,17 +559,22 @@ void registerPlugins([final Registrar? pluginRegistrar]) {
 
 import 'dart:io'; // flutter_ignore: dart_io_import.
 import 'package:shared_preferences_android/shared_preferences_android.dart' as shared_preferences_android;
+import 'package:url_launcher_android/url_launcher_android.dart' as url_launcher_android;
 import 'package:webview_flutter_android/webview_flutter_android.dart' as webview_flutter_android;
 import 'package:shared_preferences_foundation/shared_preferences_foundation.dart' as shared_preferences_foundation;
+import 'package:url_launcher_ios/url_launcher_ios.dart' as url_launcher_ios;
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart' as webview_flutter_wkwebview;
 import 'package:device_info_plus/device_info_plus.dart' as device_info_plus;
 import 'package:path_provider_linux/path_provider_linux.dart' as path_provider_linux;
 import 'package:shared_preferences_linux/shared_preferences_linux.dart' as shared_preferences_linux;
+import 'package:url_launcher_linux/url_launcher_linux.dart' as url_launcher_linux;
 import 'package:shared_preferences_foundation/shared_preferences_foundation.dart' as shared_preferences_foundation;
+import 'package:url_launcher_macos/url_launcher_macos.dart' as url_launcher_macos;
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart' as webview_flutter_wkwebview;
 import 'package:device_info_plus/device_info_plus.dart' as device_info_plus;
 import 'package:path_provider_windows/path_provider_windows.dart' as path_provider_windows;
 import 'package:shared_preferences_windows/shared_preferences_windows.dart' as shared_preferences_windows;
+import 'package:url_launcher_windows/url_launcher_windows.dart' as url_launcher_windows;
 
 @pragma('vm:entry-point')
 class _PluginRegistrant {
@@ -580,6 +587,15 @@ class _PluginRegistrant {
       } catch (err) {
         print(
           '`shared_preferences_android` threw an error: $err. '
+          'The app may not function as expected until you remove this plugin from pubspec.yaml'
+        );
+      }
+
+      try {
+        url_launcher_android.UrlLauncherAndroid.registerWith();
+      } catch (err) {
+        print(
+          '`url_launcher_android` threw an error: $err. '
           'The app may not function as expected until you remove this plugin from pubspec.yaml'
         );
       }
@@ -599,6 +615,15 @@ class _PluginRegistrant {
       } catch (err) {
         print(
           '`shared_preferences_foundation` threw an error: $err. '
+          'The app may not function as expected until you remove this plugin from pubspec.yaml'
+        );
+      }
+
+      try {
+        url_launcher_ios.UrlLauncherIOS.registerWith();
+      } catch (err) {
+        print(
+          '`url_launcher_ios` threw an error: $err. '
           'The app may not function as expected until you remove this plugin from pubspec.yaml'
         );
       }
@@ -640,12 +665,30 @@ class _PluginRegistrant {
         );
       }
 
+      try {
+        url_launcher_linux.UrlLauncherLinux.registerWith();
+      } catch (err) {
+        print(
+          '`url_launcher_linux` threw an error: $err. '
+          'The app may not function as expected until you remove this plugin from pubspec.yaml'
+        );
+      }
+
     } else if (Platform.isMacOS) {
       try {
         shared_preferences_foundation.SharedPreferencesFoundation.registerWith();
       } catch (err) {
         print(
           '`shared_preferences_foundation` threw an error: $err. '
+          'The app may not function as expected until you remove this plugin from pubspec.yaml'
+        );
+      }
+
+      try {
+        url_launcher_macos.UrlLauncherMacOS.registerWith();
+      } catch (err) {
+        print(
+          '`url_launcher_macos` threw an error: $err. '
           'The app may not function as expected until you remove this plugin from pubspec.yaml'
         );
       }
@@ -683,6 +726,15 @@ class _PluginRegistrant {
       } catch (err) {
         print(
           '`shared_preferences_windows` threw an error: $err. '
+          'The app may not function as expected until you remove this plugin from pubspec.yaml'
+        );
+      }
+
+      try {
+        url_launcher_windows.UrlLauncherWindows.registerWith();
+      } catch (err) {
+        print(
+          '`url_launcher_windows` threw an error: $err. '
           'The app may not function as expected until you remove this plugin from pubspec.yaml'
         );
       }
@@ -2876,6 +2928,7 @@ import '../widgets/pet_display.dart';
 import '../widgets/food_helpers.dart';
 import '../widgets/debug_panel.dart';
 import 'inventory_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// ホーム画面
 ///
@@ -2933,12 +2986,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      ref.read(healthPermissionProvider.notifier).check();
-      ref.read(emotionProvider.notifier).refresh();
-      // refreshSteps 完了後に streak 更新
-      ref.read(gameActionsProvider).refreshSteps().then((_) {
-        ref.read(gameActionsProvider).checkAndUpdateStreak();
-      });
+      _onResumed();
+    }
+  }
+
+  Future<void> _onResumed() async {
+    // 権限状態を先に確認（initState と同じ順序）
+    await ref.read(healthPermissionProvider.notifier).check();
+    if (!mounted) return;
+
+    ref.read(emotionProvider.notifier).refresh();
+
+    // granted のときだけ歩数 → streak 更新
+    final status = ref.read(healthPermissionProvider);
+    if (status == HealthPermissionStatus.granted) {
+      await ref.read(gameActionsProvider).refreshSteps();
+      await ref.read(gameActionsProvider).checkAndUpdateStreak();
     }
   }
 
@@ -3176,7 +3239,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         final result =
             await ref.read(healthPermissionProvider.notifier).request();
         if (result == HealthPermissionStatus.granted) {
-          ref.read(gameActionsProvider).refreshSteps();
+          await ref.read(gameActionsProvider).refreshSteps();
+          await ref.read(gameActionsProvider).checkAndUpdateStreak();
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -3340,6 +3404,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               onTap: () {
                 Navigator.of(context).pop();
                 _showResetConfirmation(context);
+              },
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: Icon(Icons.privacy_tip_outlined,
+                  color: Colors.blue.shade400),
+              title: const Text('プライバシーポリシー'),
+              onTap: () {
+                launchUrl(
+                  Uri.parse('https://walkpet.jp/privacy.html'),
+                  mode: LaunchMode.externalApplication,
+                );
               },
             ),
           ],
@@ -4531,13 +4607,14 @@ class _FoodItemTile extends StatelessWidget {
 
 
 # ===== FILE: lib/presentation/screens/onboarding_screen.dart =====
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../data/models/health_permission_status.dart';
 import '../providers/providers.dart';
 
 /// オンボーディング画面
-/// 健康データ使用の説明 → 権限要求 → Home遷移
+/// アプリ説明 → 権限リクエスト → Home遷移（fail-open）
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
 
@@ -4547,24 +4624,31 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   bool _requesting = false;
-  HealthPermissionStatus? _lastResult;
 
   Future<void> _handleStart() async {
     setState(() {
       _requesting = true;
-      _lastResult = null;
     });
 
-    // 権限リクエスト
-    final status =
-        await ref.read(healthPermissionProvider.notifier).request();
+    try {
+      // 権限リクエスト（15秒でタイムアウト）
+      await ref
+          .read(healthPermissionProvider.notifier)
+          .request()
+          .timeout(const Duration(seconds: 15));
+    } on TimeoutException {
+      debugPrint('[Onboarding] request() timed out after 15s');
+    } catch (e) {
+      debugPrint('[Onboarding] request() failed: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _requesting = false;
+        });
+      }
+    }
 
     if (!mounted) return;
-
-    setState(() {
-      _requesting = false;
-      _lastResult = status;
-    });
 
     // どの結果でも onboarding は完了 → Home へ
     // (granted 以外は Home 画面で案内を表示)
@@ -4575,139 +4659,105 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text('🐾', style: TextStyle(fontSize: 80)),
-              const SizedBox(height: 24),
-              const Text(
-                'あるくペット',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'あるいて食材を集めて\nペットを育てよう！',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 18),
-              ),
-              const SizedBox(height: 32),
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(16),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(32.0),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 64, // padding 分を差し引く
                 ),
-                child: const Column(
-                  children: [
-                    Icon(Icons.directions_walk, size: 40, color: Colors.blue),
-                    SizedBox(height: 12),
-                    Text(
-                      'このアプリは歩数データを使用します',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      '歩いた分だけ食材がもらえます。\n食材をペットにあげると\nペットが成長します。\n\n次の画面で健康データへの\nアクセスを許可してください。',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 14),
-                    ),
-                  ],
-                ),
-              ),
-
-              // 権限拒否時の案内
-              if (_lastResult == HealthPermissionStatus.denied) ...[
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.orange.shade200),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.info_outline, color: Colors.orange),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '権限が拒否されました。\n歩数機能なしでも遊べますが、\n設定アプリから後で許可できます。',
-                          style: TextStyle(fontSize: 13),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 520),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('🐾', style: TextStyle(fontSize: 80)),
+                        const SizedBox(height: 24),
+                        const Text(
+                          'あるくペット',
+                          style: TextStyle(
+                              fontSize: 28, fontWeight: FontWeight.bold),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-
-              // エラー / 利用不可時の案内
-              if (_lastResult == HealthPermissionStatus.unavailable ||
-                  _lastResult == HealthPermissionStatus.error) ...[
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.red.shade200),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.warning_amber, color: Colors.red),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _lastResult == HealthPermissionStatus.unavailable
-                              ? '健康データが利用できません。\n端末がHealth Connectに\n対応していない可能性があります。'
-                              : '健康データへのアクセス中に\nエラーが発生しました。',
-                          style: const TextStyle(fontSize: 13),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'あるいて食材を集めて\nペットを育てよう！',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 18),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-
-              const SizedBox(height: 32),
-
-              // メインボタン
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: _requesting ? null : _handleStart,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: _requesting
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2.5,
+                        const SizedBox(height: 32),
+                        Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(16),
                           ),
-                        )
-                      : Text(
-                          _lastResult == null ? 'はじめる' : 'このまま進む',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                          child: const Column(
+                            children: [
+                              Icon(Icons.directions_walk,
+                                  size: 40, color: Colors.blue),
+                              SizedBox(height: 12),
+                              Text(
+                                'このアプリは歩数データを使用します',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              SizedBox(height: 8),
+                              Text(
+                                '歩いた分だけ食材がもらえます。\n食材をペットにあげると\nペットが成長します。\n\nこのあと健康データへの\nアクセス許可をお願いする\n場合があります。',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontSize: 14),
+                              ),
+                            ],
                           ),
                         ),
+
+                        const SizedBox(height: 32),
+
+                        // メインボタン — 常に「はじめる」
+                        SizedBox(
+                          width: double.infinity,
+                          height: 56,
+                          child: ElevatedButton(
+                            onPressed: _requesting ? null : _handleStart,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            child: _requesting
+                                ? const SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2.5,
+                                    ),
+                                  )
+                                : const Text(
+                                    'はじめる',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                          ),
+                        ),
+
+                        // 下部余白（ボタンが画面端に密着しない）
+                        const SizedBox(height: 32),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
@@ -4744,68 +4794,89 @@ class TitleScreen extends StatelessWidget {
           ),
         ),
         child: SafeArea(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Spacer(flex: 2),
-
-              // ペット絵文字
-              Text(config.emoji, style: const TextStyle(fontSize: 80)),
-              const SizedBox(height: 16),
-
-              // タイトル
-              Text(
-                'あるくペット',
-                style: TextStyle(
-                  fontSize: 36,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.green.shade800,
-                  letterSpacing: 4,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'おさんぽで育てよう',
-                style: TextStyle(
-                  fontSize: 15,
-                  color: Colors.green.shade600,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-
-              const Spacer(flex: 3),
-
-              // STARTボタン
-              SizedBox(
-                width: 200,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => const HomeScreen()),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green.shade600,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(26),
-                    ),
-                    elevation: 4,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: constraints.maxHeight,
                   ),
-                  child: const Text(
-                    'START',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 6,
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 520),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          // 上部余白
+                          const SizedBox(height: 80),
+
+                          // ペット絵文字
+                          Text(config.emoji,
+                              style: const TextStyle(fontSize: 80)),
+                          const SizedBox(height: 16),
+
+                          // タイトル
+                          Text(
+                            'あるくペット',
+                            style: TextStyle(
+                              fontSize: 36,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green.shade800,
+                              letterSpacing: 4,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'おさんぽで育てよう',
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: Colors.green.shade600,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+
+                          // 中間余白
+                          const SizedBox(height: 80),
+
+                          // STARTボタン
+                          SizedBox(
+                            width: 200,
+                            height: 52,
+                            child: ElevatedButton(
+                              onPressed: () {
+                                Navigator.of(context).pushReplacement(
+                                  MaterialPageRoute(
+                                      builder: (_) => const HomeScreen()),
+                                );
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green.shade600,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(26),
+                                ),
+                                elevation: 4,
+                              ),
+                              child: const Text(
+                                'START',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 6,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          // 下部余白
+                          const SizedBox(height: 80),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-
-              const Spacer(flex: 2),
-            ],
+              );
+            },
           ),
         ),
       ),

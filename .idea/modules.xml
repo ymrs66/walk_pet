@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/walk_pet.iml" filepath="$PROJECT_DIR$/walk_pet.iml" />
+      <module fileurl="file://$PROJECT_DIR$/android/walk_pet_android.iml" filepath="$PROJECT_DIR$/android/walk_pet_android.iml" />
     </modules>
   </component>
 </project>

@@ -79,12 +79,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      ref.read(healthPermissionProvider.notifier).check();
-      ref.read(emotionProvider.notifier).refresh();
-      // refreshSteps 完了後に streak 更新
-      ref.read(gameActionsProvider).refreshSteps().then((_) {
-        ref.read(gameActionsProvider).checkAndUpdateStreak();
-      });
+      _onResumed();
+    }
+  }
+
+  Future<void> _onResumed() async {
+    // 権限状態を先に確認（initState と同じ順序）
+    await ref.read(healthPermissionProvider.notifier).check();
+    if (!mounted) return;
+
+    ref.read(emotionProvider.notifier).refresh();
+
+    // granted のときだけ歩数 → streak 更新
+    final status = ref.read(healthPermissionProvider);
+    if (status == HealthPermissionStatus.granted) {
+      await ref.read(gameActionsProvider).refreshSteps();
+      await ref.read(gameActionsProvider).checkAndUpdateStreak();
     }
   }
 
@@ -322,7 +332,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         final result =
             await ref.read(healthPermissionProvider.notifier).request();
         if (result == HealthPermissionStatus.granted) {
-          ref.read(gameActionsProvider).refreshSteps();
+          await ref.read(gameActionsProvider).refreshSteps();
+          await ref.read(gameActionsProvider).checkAndUpdateStreak();
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(

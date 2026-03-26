@@ -26,68 +26,89 @@ class TitleScreen extends StatelessWidget {
           ),
         ),
         child: SafeArea(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Spacer(flex: 2),
-
-              // ペット絵文字
-              Text(config.emoji, style: const TextStyle(fontSize: 80)),
-              const SizedBox(height: 16),
-
-              // タイトル
-              Text(
-                'あるくペット',
-                style: TextStyle(
-                  fontSize: 36,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.green.shade800,
-                  letterSpacing: 4,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'おさんぽで育てよう',
-                style: TextStyle(
-                  fontSize: 15,
-                  color: Colors.green.shade600,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-
-              const Spacer(flex: 3),
-
-              // STARTボタン
-              SizedBox(
-                width: 200,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => const HomeScreen()),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green.shade600,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(26),
-                    ),
-                    elevation: 4,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: constraints.maxHeight,
                   ),
-                  child: const Text(
-                    'START',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 6,
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 520),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          // 上部余白
+                          const SizedBox(height: 80),
+
+                          // ペット絵文字
+                          Text(config.emoji,
+                              style: const TextStyle(fontSize: 80)),
+                          const SizedBox(height: 16),
+
+                          // タイトル
+                          Text(
+                            'あるくペット',
+                            style: TextStyle(
+                              fontSize: 36,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green.shade800,
+                              letterSpacing: 4,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'おさんぽで育てよう',
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: Colors.green.shade600,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+
+                          // 中間余白
+                          const SizedBox(height: 80),
+
+                          // STARTボタン
+                          SizedBox(
+                            width: 200,
+                            height: 52,
+                            child: ElevatedButton(
+                              onPressed: () {
+                                Navigator.of(context).pushReplacement(
+                                  MaterialPageRoute(
+                                      builder: (_) => const HomeScreen()),
+                                );
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green.shade600,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(26),
+                                ),
+                                elevation: 4,
+                              ),
+                              child: const Text(
+                                'START',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 6,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          // 下部余白
+                          const SizedBox(height: 80),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-
-              const Spacer(flex: 2),
-            ],
+              );
+            },
           ),
         ),
       ),
