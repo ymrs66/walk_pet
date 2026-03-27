@@ -971,7 +971,7 @@ class _PermissionRequestSection extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'iPhone の歩数データを使って、散歩量に\n応じてペットの状態が変化します。',
+              '端末の歩数データを使って、散歩量に\n応じてペットの状態が変化します。',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
